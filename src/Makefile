@@ -11,7 +11,7 @@ parser: parser.c scanner.c $(SRC)
 	$(CC) $(CFLAGS) -o $(OUT) $^
 
 parser.c: parser.y
-	$(YACC) -o $@ --defines=parser.tab.h $^
+	$(YACC) -v -o $@ --defines=parser.tab.h $^
 
 %.c:%.l
 	$(LEX) -o $@ $^

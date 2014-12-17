@@ -17,15 +17,23 @@
 %%
 
 primary_expression
-: IDENTIFIER
+: compound_identifier
 | ICONSTANT
 | FCONSTANT
 | '(' expression ')'
-| IDENTIFIER '(' ')'
-| IDENTIFIER '(' argument_expression_list ')'
-| IDENTIFIER INC_OP
-| IDENTIFIER DEC_OP
+| compound_identifier INC_OP
+| compound_identifier DEC_OP
+;
+
+compound_identifier
+: IDENTIFIER
 | IDENTIFIER '[' expression ']'
+| IDENTIFIER '(' argument_expression_list ')'
+| IDENTIFIER '(' ')'
+| IDENTIFIER '[' expression ']' '.' compound_identifier
+| IDENTIFIER '(' argument_expression_list ')' '.' compound_identifier
+| IDENTIFIER '(' ')' '.' compound_identifier
+| IDENTIFIER '.' compound_identifier
 ;
 
 argument_expression_list
@@ -61,8 +69,8 @@ comparison_expression
 ;
 
 expression
-: IDENTIFIER '=' comparison_expression
-| IDENTIFIER '[' expression ']' '=' comparison_expression
+: compound_identifier '=' comparison_expression
+| compound_identifier '[' expression ']' '=' comparison_expression
 | comparison_expression
 ;
 
