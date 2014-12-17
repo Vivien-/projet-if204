@@ -9,7 +9,7 @@
 %token <str> IDENTIFIER ICONSTANT FCONSTANT
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token INT FLOAT VOID
-%token IF ELSE WHILE RETURN FOR
+%token IF ELSE WHILE RETURN FOR DO
 %union {
   char *str;
 }
@@ -135,6 +135,7 @@ selection_statement
 iteration_statement
 : WHILE '(' expression ')' statement
 | FOR '(' expression_statement expression_statement expression ')' statement
+| DO statement WHILE '(' expression ')' ';'
 ;
 
 jump_statement
