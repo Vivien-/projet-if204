@@ -8,7 +8,7 @@
 
 %token <str> IDENTIFIER ICONSTANT FCONSTANT
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
-%token INT FLOAT VOID
+%token INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
 %union {
   char *str;
@@ -79,6 +79,7 @@ type_name
 : VOID 
 | INT  
 | FLOAT
+| CLASS IDENTIFIER
 ;
 
 declarator
@@ -150,11 +151,27 @@ program
 
 external_declaration
 : function_definition
+| class_definition
 | declaration
 ;
 
 function_definition
 : type_name declarator compound_statement
+;
+
+class_definition
+: CLASS IDENTIFIER '{' class_internal_declaration_list '}'
+| CLASS IDENTIFIER '{' '}'
+;
+
+class_internal_declaration_list
+: class_internal_declaration
+| class_internal_declaration class_internal_declaration_list
+;
+
+class_internal_declaration
+: declaration
+| function_definition
 ;
 
 %%

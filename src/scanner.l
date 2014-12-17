@@ -23,6 +23,7 @@ int check_type ();
 "while"		{ count(); return(WHILE); }
 "for"		{ count(); return(FOR); }
 "do"		{ count(); return(DO); }
+"class"		{ count(); return(CLASS); }
 
 {L}({L}|{D})*	{ count(); yylval.str=strdup(yytext); return(IDENTIFIER); }
 
