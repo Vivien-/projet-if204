@@ -131,7 +131,10 @@ variable_type_t *getTypeFunction(variable_type_t *return_type, int nb_param, ...
 }
 
 int areSameType(variable_type_t *t1, variable_type_t *t2) {
-  int res = t1->basic == t2->basic &&  t1->array_size == t2->array_size && t1->nb_param == t2->nb_param && !strcmp(t1->class_name, t2->class_name);
+  int res = t1->basic == t2->basic
+    && t1->array_size == t2->array_size
+    && t1->nb_param == t2->nb_param
+    && !strcmp(t1->class_name, t2->class_name);
 
   param_t *p11, *p12, *p21, *p22;
   p11 = TAILQ_FIRST(t1->params);
@@ -148,11 +151,14 @@ int areSameType(variable_type_t *t1, variable_type_t *t2) {
 }
 
 void freeVariableType(variable_type_t *type) {
+  if (type == NULL) return;
+
   if (type->params != NULL) {
     param_t *p;
 
     while(!TAILQ_EMPTY(type->params)) {
       p = TAILQ_FIRST(type->params);
+      freeVariableType(p->type);
       TAILQ_REMOVE(type->params, p, pointers);
       free(p);
     }
@@ -180,7 +186,7 @@ class_definition_t *getClassDefinition(char *name, int nb_member, ...) {
 
   va_start(ap, nb_member);
   for (i = 0; i < nb_member; i++) {
-    member_t *member = malloc(sizeof member);
+    member_t *member = malloc(sizeof (member_t));
     member->type = va_arg(ap, variable_type_t*);
     TAILQ_INSERT_HEAD(class->members, member, pointers);
   }
@@ -190,14 +196,18 @@ class_definition_t *getClassDefinition(char *name, int nb_member, ...) {
 }
 
 void freeClassDefinition(class_definition_t *class) {
+  if (class == NULL) return;
+
   if (class->members != NULL) {
-    member_t *p1, *p2;
-    p1 = TAILQ_FIRST(class->members);
-    while(p1 != NULL) {
-      p2 = TAILQ_NEXT(p1, pointers);
-      free(p1);
-      p1 = p2;
+    member_t *p;
+
+    while(!TAILQ_EMPTY(class->members)) {
+      p = TAILQ_FIRST(class->members);
+      freeVariableType(p->type);
+      TAILQ_REMOVE(class->members, p, pointers);
+      free(p);
     }
+    free(class->members);
   }
   if (class->class_name != NULL) {
     free(class->class_name);

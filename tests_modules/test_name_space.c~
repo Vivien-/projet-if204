@@ -1,0 +1,39 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "name_space.h"
+
+#define ASSERT(X) if(!(#X)) { printf("Assert error : #X\n"); } else { cpt++; printf(".\n"); };
+
+int main() {
+  int cpt = 0;
+  
+  name_space_stack_t *nsp = newNameSpaceStack();
+
+  ASSERT(isRoot(nsp));
+
+  ASSERT(find("a", nsp) == NULL);
+
+  stackNewNameSpace(nsp);
+
+  ASSERT(!isRoot(nsp));
+
+  insert("a", getTypeInt(), nsp);
+
+  ASSERT(find("a", nsp) != NULL);
+
+  stackNewNameSpace(nsp);
+
+  ASSERT(find("a", nsp) != NULL);
+
+  popNameSpace(nsp);
+  popNameSpace(nsp);
+  
+  ASSERT(isRoot(nsp));
+
+  ASSERT(find("a", nsp) == NULL);
+
+  freeNameSpaceStack(nsp);
+
+  return 0;
+}
