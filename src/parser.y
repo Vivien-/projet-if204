@@ -151,7 +151,7 @@ jump_statement
 : RETURN ';'  { asprintf(&code, "%s\n ret", code); } 
 | RETURN expression ';'  {
   char * var1 = "%%eax";
-  asprintf(&code, "%s\tmovl $%c, %s\n\tret\n", code, $2, var1); } 
+  asprintf(&code, "%s\tmovl $0, %s\n\tret\n", code, var1); } 
 ;
 
 program
