@@ -3,11 +3,12 @@
 
 #include "../src/name_space.h"
 
-#define ASSERT(X) if(!(#X)) { printf("Assert error : #X\n"); } else { cpt++; printf(".\n"); };
+#define ASSERT(X) if(!(#X)) { printf("Assert error: #X\n"); } else { cpt++; printf(".\n"); };
 
 int main() {
   int cpt = 0;
-  
+  printf("Tests name_space.c\n");
+
   name_space_stack_t *nsp = newNameSpaceStack();
 
   ASSERT(isRoot(nsp));
@@ -18,22 +19,30 @@ int main() {
 
   ASSERT(!isRoot(nsp));
 
-  insert("a", getTypeInt(), nsp);
+  insertInCurrentNameSpace("a", newVariable(getTypeInt(), 0), nsp);
 
-  ASSERT(find("a", nsp) != NULL);
+  ASSERT(findInNameSpace("a", nsp) != NULL);
 
   stackNewNameSpace(nsp);
 
-  ASSERT(find("a", nsp) != NULL);
+  ASSERT(findInNameSpace("a", nsp) != NULL);
 
   popNameSpace(nsp);
   popNameSpace(nsp);
   
-  ASSERT(isRoot(nsp));
+  ASSERT(isCurrentNameSpaceRoot(nsp));
 
-  ASSERT(find("a", nsp) == NULL);
+  ASSERT(findInNameSpace("a", nsp) == NULL);
 
   freeNameSpaceStack(nsp);
+
+  class_name_space_t *cnp = newClassNameSpace();
+  
+  insertInClassNameSpace("C", getClassDefinition("C", newMemberList()), cnp);
+
+  ASSERT(findInClassNameSpace("C", cnp) != NULL);
+
+  freeClassNameSpace(cnp);
 
   printf("OK (%d)\n", cpt);
   return 0;

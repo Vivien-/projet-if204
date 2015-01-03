@@ -3,7 +3,7 @@
 
 #include "../src/variable_type.h"
 
-#define ASSERT(X) if(!(#X)) { printf("Assert error : #X\n"); } else { cpt++; printf(".\n"); };
+#define ASSERT(X) if(!(#X)) { printf("Assert error: #X\n"); } else { cpt++; printf(".\n"); };
 
 int main() {
   int cpt = 0;
@@ -27,19 +27,37 @@ int main() {
   freeVariableType(t1);
   freeVariableType(t2);
 
-  t1 = getTypeFunction(getTypeVoid(), 1, getTypeInt());
-  t2 = getTypeFunction(getTypeVoid(), 1, getTypeInt());
+  param_list_t *params1 = newParamList();
+  insertNewParam(params1, getTypeInt());
+  param_list_t *params2 = newParamList();
+  insertNewParam(params2, getTypeInt());
+
+  t1 = getTypeFunction(getTypeVoid(), params1);
+  t2 = getTypeFunction(getTypeVoid(), params2);
   ASSERT(areSameType(t1, t2));
   freeVariableType(t1);
   freeVariableType(t2);
+
+  params1 = newParamList();
+  params2 = newParamList();
+  insertNewParam(params2, getTypeInt());
   
-  t1 = getTypeFunction(getTypeVoid(), 0);
-  t2 = getTypeFunction(getTypeVoid(), 1, getTypeInt());
+  t1 = getTypeFunction(getTypeVoid(), params1);
+  t2 = getTypeFunction(getTypeVoid(), params2);
   ASSERT(!areSameType(t1, t2));
   freeVariableType(t1);
   freeVariableType(t2);
 
-  class_definition_t *c = getClassDefinition("C", 2, getTypeInt(), getTypeFunction(getTypeVoid(), 1, getTypeFloatP()));
+  member_list_t *members = newMemberList();
+  params1 = newParamList();
+  insertNewParam(params1, getTypeFloatP());
+  insertNewMember(members, "a", getTypeInt());
+  insertNewMember(members, "b", getTypeFunction(getTypeVoid(), params1));
+
+  class_definition_t *c = getClassDefinition("C", members);
+
+  ASSERT(memberOffset(c, "b") == 4);
+
   freeClassDefinition(c);
 
   printf("OK (%d)\n", cpt);
