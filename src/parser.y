@@ -3,7 +3,7 @@
     extern int yylineno;
     int yylex ();
     int yyerror ();
-
+    char* code = NULL;
 %}
 
 %token <str> IDENTIFIER ICONSTANT FCONSTANT
@@ -148,8 +148,10 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'
-| RETURN expression ';'
+: RETURN ';'  { asprintf(&code, "%s\n ret", code); } 
+| RETURN expression ';'  {
+  char * var1 = "%%eax";
+  asprintf(&code, "%s\tmovl $0, %s\n\tret\n", code, var1); } 
 ;
 
 program
@@ -203,11 +205,19 @@ int yyerror (char *s) {
 int main (int argc, char *argv[]) {
     FILE *input = NULL;
     if (argc==2) {
+      asprintf(&code, "\t.globl main\n\t.type main, @function\n main:\n");
 	input = fopen (argv[1], "r");
 	file_name = strdup (argv[1]);
+	
 	if (input) {
 	    yyin = input;
 	    yyparse();
+	 
+	    
+	    char * file_output = argv[1];
+	    file_output[strlen(file_output)-1] = 's';
+	    FILE* output = fopen(file_output, "w");
+	    fprintf(output, code);
 	}
 	else {
 	  fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);
