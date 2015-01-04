@@ -11,6 +11,7 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
+%type <str> declarator
 %union {
   char *str;
 }
@@ -19,8 +20,8 @@
 
 primary_expression
 : compound_identifier
-| ICONSTANT
-| FCONSTANT
+| ICONSTANT {}
+| FCONSTANT {}
 | '(' expression ')'
 | compound_identifier INC_OP
 | compound_identifier DEC_OP
@@ -92,11 +93,11 @@ type_name
 ;
 
 declarator
-: IDENTIFIER  
+: IDENTIFIER  { $$ = $1;}
 | '*' IDENTIFIER
 | IDENTIFIER '[' ICONSTANT ']'
 | declarator '(' parameter_list ')'
-| declarator '(' ')'
+| declarator '(' ')' {$$ = $1;} 
 ;
 
 parameter_list
@@ -151,7 +152,7 @@ iteration_statement
 jump_statement
 : RETURN ';'  { asprintf(&code, "%s\n ret", code); } 
 | RETURN expression ';'  {
-  char * var1 = "%%eax";
+  char * var1 = "%eax";
   asprintf(&code, "%s\tmovl $0, %s\n\tret\n", code, var1); } 
 ;
 
@@ -167,7 +168,9 @@ external_declaration
 ;
 
 function_definition
-: type_name declarator compound_statement
+: type_name declarator compound_statement  { 
+  if(strcmp($2, "main") == 0) { asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);}}
+
 ;
 
 class_definition
@@ -205,7 +208,7 @@ FILE* output = NULL;
 FILE *input = NULL;
 
 void init(char* filename){
-  code = "\t.globl main\n\t.type main, @function\n main:\n";	    
+  code = "";	    
   file_name = strdup(filename);
   file_output = strdup(filename);
   file_output[strlen(file_output)-1] = 's';
