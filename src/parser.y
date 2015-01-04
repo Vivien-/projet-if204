@@ -1,27 +1,33 @@
 %{
-    #include <stdio.h>
-    extern int yylineno;
-    extern int asprintf(char** strp, const char *fmt, ...);
-    int yylex ();
-    int yyerror ();
-    char* code = NULL;
+  #include <stdio.h>
+  #include <string.h>
+  extern int yylineno;
+  extern int asprintf(char** strp, const char *fmt, ...);
+  int yylex ();
+  int yyerror ();
+  char* code = NULL;
 %}
 
-%token <str> IDENTIFIER ICONSTANT FCONSTANT
+%token <str> IDENTIFIER
+%token <integer> ICONSTANT
+%token <floating> FCONSTANT
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
+%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression
 %type <str> declarator
 %union {
   char *str;
+  int integer;
+  float floating;
 }
 %start program
 %%
 
 primary_expression
 : compound_identifier
-| ICONSTANT {}
-| FCONSTANT {}
+| ICONSTANT { asprintf(&$$, "%d", $1); }
+| FCONSTANT { asprintf(&$$, "%f", $1); }
 | '(' expression ')'
 | compound_identifier INC_OP
 | compound_identifier DEC_OP
@@ -44,24 +50,24 @@ argument_expression_list
 ;
 
 unary_expression
-: primary_expression
+: primary_expression { $$ = $1; }
 | '-' unary_expression
 | '!' unary_expression
 ;
 
 multiplicative_expression
-: unary_expression
+: unary_expression { $$ = $1; }
 | multiplicative_expression '*' unary_expression
 ;
 
 additive_expression
-: multiplicative_expression
+: multiplicative_expression { $$ = $1; }
 | additive_expression '+' multiplicative_expression
 | additive_expression '-' multiplicative_expression
 ;
 
 comparison_expression
-: additive_expression
+: additive_expression { $$ = $1; }
 | additive_expression '<' additive_expression
 | additive_expression '>' additive_expression
 | additive_expression LE_OP additive_expression
@@ -73,7 +79,7 @@ comparison_expression
 expression
 : compound_identifier '=' comparison_expression
 | compound_identifier '[' expression ']' '=' comparison_expression
-| comparison_expression
+| comparison_expression { $$ = $1; }
 ;
 
 declaration
@@ -170,7 +176,6 @@ external_declaration
 function_definition
 : type_name declarator compound_statement  { 
   if(strcmp($2, "main") == 0) { asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);}}
-
 ;
 
 class_definition
@@ -214,7 +219,6 @@ void init(char* filename){
   file_output[strlen(file_output)-1] = 's';
   output = fopen(file_output, "w");
   input = fopen(filename, "r");
-
   ns = newNameSpaceStack();
   cns = newClassNameSpace();
 }
@@ -240,6 +244,7 @@ int main (int argc, char *argv[]) {
     }
     free(file_name);
     free(file_output);
+    free(code);
     fclose(input);
     fclose(output);
   }
