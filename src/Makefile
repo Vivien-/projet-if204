@@ -7,13 +7,14 @@ OUT=compiler
 
 all: parser
 
-parser: parser.c scanner.c $(SRC)
+parser: $(SRC) parser.c scanner.c
 	$(CC) $(CFLAGS) -o $(OUT) $^
 
 parser.c: parser.y
 	$(YACC) -o $@ --defines=parser.tab.h $^
 
-%.c:%.l
+#%.c:%.l
+scanner.c: scanner.l
 	$(LEX) -o $@ $^
 
 tests:

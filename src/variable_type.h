@@ -1,22 +1,38 @@
 #ifndef VARIABLE_TYPE_H
 #define VARIABLE_TYPE_H
 
-#include <stdarg.h>
 #include <sys/queue.h>
 
 /*
- * Ce module définie un meta-type permettant de définir un type de variable (dont fonctions) ainsi qu'une définition de classe
+ * Ce module définie des meta-types ainsi que les structures utilisées par l'analyseur syntaxique
  */
 
-enum BASIC_TYPE { TYPE_VOID, TYPE_VOIDP, TYPE_INT, TYPE_INTP, TYPE_FLOAT, TYPE_FLOATP, TYPE_CLASS };
+enum BASIC_TYPE { TYPE_VOID, TYPE_INT, TYPE_FLOAT, TYPE_CLASS };
 
 typedef struct variable_type_s variable_type_t;
+typedef struct class_definition_s class_definition_t;
+
 typedef struct param_list_s param_list_t;
 typedef struct param_s param_t;
-typedef struct class_definition_s class_definition_t;
 typedef struct member_list_s member_list_t;
 typedef struct member_s member_t;
+typedef struct declaration_list_s declaration_list_t;
+typedef struct declaration_s declaration_t;
 typedef struct variable_s variable_t;
+
+struct variable_type_s {
+  enum BASIC_TYPE basic;
+  int array_size; /* not an array if -1 */
+  int nb_param; /* not a function if -1 */
+  int pointer;
+  param_list_t *params;
+  char *class_name;
+};
+
+struct class_definition_s {
+  char *class_name;
+  member_list_t *members;
+};
 
 struct param_s {
   variable_type_t *type;
@@ -24,14 +40,6 @@ struct param_s {
 };
 
 TAILQ_HEAD(param_list_s, param_s);
-
-struct variable_type_s {
-  enum BASIC_TYPE basic;
-  int array_size; /* not an array if -1 */
-  int nb_param; /* not a function if -1 */
-  param_list_t *params;
-  char *class_name;
-};
 
 struct member_s {
   char *name;
@@ -41,10 +49,14 @@ struct member_s {
 
 TAILQ_HEAD(member_list_s, member_s);
 
-struct class_definition_s {
-  char *class_name;
-  member_list_t *members;
+struct declaration_s {
+  int pointer;
+  int array_size;
+  char *name;
+  TAILQ_ENTRY(declaration_s) pointers;
 };
+
+TAILQ_HEAD(declaration_list_s, declaration_s);
 
 struct variable_s {
   variable_type_t *type;
@@ -54,6 +66,7 @@ struct variable_s {
 /*
  * Constructeur de types de base, leurs pointeurs et tableaux
  */
+variable_type_t *getType(enum BASIC_TYPE, declaration_t *declaration);
 variable_type_t *getTypeVoid();
 variable_type_t *getTypeVoidP();
 variable_type_t *getTypeInt();
@@ -120,14 +133,24 @@ variable_t *newVariable(variable_type_t *type, int addr);
 void freeVariable(variable_t *var);
 
 /*
- * Gestion d'allocation et libération des listes de paramètres et membres
- * (types non copiés)
+ * Gestion d'un liste de paramètres d'une fonction
  */
 param_list_t *newParamList();
 void freeParamList(param_list_t *param_list);
 void insertNewParam(param_list_t *param_list, variable_type_t *type);
+
+/*
+ * Gestion d'une liste de membres d'une classe
+ */
 member_list_t *newMemberList();
 void freeMemberList(member_list_t *member_list);
 void insertNewMember(member_list_t *member_list, char *name, variable_type_t *type);
+
+/*
+ * Gestion d'une liste de declaration
+ */
+declaration_list_t *newDeclarationList();
+void freeDeclarationList(declaration_list_t *declaration_list);
+void insertDeclaration(declaration_list_t *declaration_list, declaration_t *declaration);
 
 #endif

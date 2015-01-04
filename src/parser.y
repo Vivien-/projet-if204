@@ -1,25 +1,35 @@
 %{
   #include <stdio.h>
   #include <string.h>
+  #include "variable_type.h"
+  #include "name_space.h"
   extern int yylineno;
   extern int asprintf(char** strp, const char *fmt, ...);
   int yylex ();
   int yyerror ();
   char* code = NULL;
+  name_space_stack_t *ns = NULL;
+  class_name_space_t *cns = NULL;
+  int stack_head = 0;
+
+  declaration_list_t *declaration_list = NULL;
 %}
 
 %token <str> IDENTIFIER
 %token <integer> ICONSTANT
 %token <floating> FCONSTANT
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
-%token INT FLOAT VOID CLASS
+%token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
 %type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression
-%type <str> declarator
+%type <basic_type> type_name
+%type <declaration> declarator
 %union {
+  enum BASIC_TYPE basic_type;
   char *str;
   int integer;
   float floating;
+  declaration_t declaration;
 }
 %start program
 %%
@@ -83,27 +93,52 @@ expression
 ;
 
 declaration
-: type_name declarator_list ';'
+: type_name declarator_list ';' {
+  int size;
+  declaration_t *declaration;
+  variable_type_t *type;
+  TAILQ_FOREACH(declaration, declaration_list, pointers) {
+    printf("declaring variable %s\n", declaration->name);
+    if (findInNameSpace(declaration->name, ns) != NULL) { //doesn't work
+      yyerror("variable already declared");
+    }
+    type = getType($1, declaration);
+    size = getSize(type);
+    stack_head += size;
+    insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
+    asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
+  }
+  freeDeclarationList(declaration_list);
+  declaration_list = NULL;
+ }
 ;
 
 declarator_list
-: declarator
-| declarator_list ',' declarator
+: declarator { 
+  if (declaration_list == NULL) {
+    declaration_list = newDeclarationList();
+  }
+  insertDeclaration(declaration_list, &$1); }
+| declarator_list ',' declarator { 
+  if (declaration_list == NULL) {
+    declaration_list = newDeclarationList();
+  }
+  insertDeclaration(declaration_list, &$3); }
 ;
 
 type_name
-: VOID 
-| INT  
-| FLOAT
-| CLASS IDENTIFIER
+: VOID { $$ = TYPE_VOID; }
+| INT { $$ = TYPE_INT; }
+| FLOAT {$$ = TYPE_FLOAT; }
+| CLASS IDENTIFIER { $$ = TYPE_CLASS; }
 ;
 
 declarator
-: IDENTIFIER  { $$ = $1;}
-| '*' IDENTIFIER
-| IDENTIFIER '[' ICONSTANT ']'
-| declarator '(' parameter_list ')'
-| declarator '(' ')' {$$ = $1;} 
+: IDENTIFIER  { $$.array_size = 1; $$.pointer = 0; $$.name = $1;}
+| '*' IDENTIFIER { $$.array_size = 1; $$.pointer = 1; $$.name = $2; }
+| IDENTIFIER '[' ICONSTANT ']' { $$.array_size = $3; $$.pointer = 0; $$.name = $1; }
+| declarator '(' parameter_list ')' { $$ = $1; }
+| declarator '(' ')' { $$ = $1; } 
 ;
 
 parameter_list
@@ -175,7 +210,7 @@ external_declaration
 
 function_definition
 : type_name declarator compound_statement  { 
-  if(strcmp($2, "main") == 0) { asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);}}
+  if(strcmp($2.name, "main") == 0) { asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);}}
 ;
 
 class_definition
@@ -206,9 +241,6 @@ extern FILE *yyin;
 
 char *file_name = NULL;
 char *file_output = NULL;
-name_space_stack_t *ns = NULL;
-class_name_space_t *cns = NULL;
-int stack_head = 0;
 FILE* output = NULL;
 FILE *input = NULL;
 
@@ -245,6 +277,8 @@ int main (int argc, char *argv[]) {
     free(file_name);
     free(file_output);
     free(code);
+    freeNameSpaceStack(ns);
+    freeClassNameSpace(cns);
     fclose(input);
     fclose(output);
   }

@@ -1,13 +1,28 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "variable_type.h"
+
+variable_type_t *getType(enum BASIC_TYPE basic, declaration_t *declaration){
+  variable_type_t *type = malloc(sizeof (variable_type_t));
+  type->basic = basic;
+  type->array_size = declaration->array_size;
+  type->pointer = declaration->pointer;
+  type->nb_param = -1;
+  type->nb_param = -1;
+  type->params = malloc(sizeof (param_list_t));
+  TAILQ_INIT(type->params);
+  type->class_name = NULL;
+  return type;
+}
 
 variable_type_t *getTypeVoid() {
   variable_type_t *type = malloc(sizeof (variable_type_t));
   type->basic = TYPE_VOID;
   type->array_size = -1;
   type->nb_param = -1;
+  type->pointer = 0;
   type->params = malloc(sizeof (param_list_t));
   TAILQ_INIT(type->params);
   type->class_name = NULL;
@@ -16,7 +31,8 @@ variable_type_t *getTypeVoid() {
 
 variable_type_t *getTypeVoidP() {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_VOIDP;
+  type->basic = TYPE_VOID;
+  type->pointer = 1;
   return type;
 }
 
@@ -34,27 +50,30 @@ variable_type_t *getTypeFloat() {
 
 variable_type_t *getTypeIntP() {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_INTP;
+  type->basic = TYPE_INT;
+  type->pointer = 1;
   return type;
 }
 
 variable_type_t *getTypeFloatP() {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_FLOATP;
+  type->basic = TYPE_FLOAT;
+  type->pointer = 1;
   return type;
 }
 
 variable_type_t *getTypeVoidArray(int size) {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_VOIDP;
+  type->basic = TYPE_VOID;
   type->array_size = size;
   return type;
 }
 
 variable_type_t *getTypeVoidPArray(int size) {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_VOIDP;
+  type->basic = TYPE_VOID;
   type->array_size = size;
+  type->pointer = 1;
   return type;
 }
 
@@ -74,15 +93,17 @@ variable_type_t *getTypeFloatArray(int size) {
 
 variable_type_t *getTypeIntPArray(int size) {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_INTP;
+  type->basic = TYPE_INT;
   type->array_size = size;
+  type->pointer = 1;
   return type;
 }
 
 variable_type_t *getTypeFLoatPArray(int size) {
   variable_type_t *type = getTypeVoid();
-  type->basic = TYPE_FLOATP;
+  type->basic = TYPE_FLOAT;
   type->array_size = size;
+  type->pointer = 1;
   return type;
 }
 
@@ -124,6 +145,7 @@ int areSameType(variable_type_t *t1, variable_type_t *t2) {
   int res = t1->basic == t2->basic
     && t1->array_size == t2->array_size
     && t1->nb_param == t2->nb_param
+    && t1->pointer == t2->pointer
     && !strcmp(t1->class_name, t2->class_name);
 
   param_t *p11, *p12, *p21, *p22;
@@ -141,21 +163,7 @@ int areSameType(variable_type_t *t1, variable_type_t *t2) {
 }
 
 int getSize(variable_type_t *t) {
-  int size = 0;
-  switch(t->basic) {
-  case TYPE_INT:
-  case TYPE_FLOAT:
-  case TYPE_VOID:
-    size = 4;
-    break;
-  case TYPE_INTP:
-  case TYPE_FLOATP:
-  case TYPE_VOIDP:
-  case TYPE_CLASS:
-    size = 8;
-    break;
-  }
-  return size * (t->array_size == -1 ? 1 : t->array_size);
+  return 4 * (t->pointer == 1 || t->basic == TYPE_CLASS ? 2 : 1) * (t->array_size == -1 ? 1 : t->array_size);
 }
 
 void freeVariableType(variable_type_t *type) {
@@ -175,8 +183,7 @@ void freeVariableType(variable_type_t *type) {
 class_definition_t *getClassDefinition(char *name, member_list_t *member_list) {
   class_definition_t *class = malloc(sizeof (class_definition_t));
 
-  class->class_name = malloc(strlen(name) + 1);
-  memcpy(class->class_name, name, strlen(name));
+  class->class_name = strdup(name);
   class->members = member_list;
   return class;
 }
@@ -217,18 +224,6 @@ void freeClassDefinition(class_definition_t *class) {
     free(class->class_name);
   }
   free(class);
-}
-
-variable_t *newVariable(variable_type_t *type, int addr) {
-  variable_t *var = malloc(sizeof (variable_t));
-  var->type = type;
-  var->addr = addr;
-  return var;
-}
-
-void freeVariable(variable_t *var) {
-  freeVariableType(var->type);
-  free(var);
 }
 
 param_list_t *newParamList() {
@@ -274,8 +269,44 @@ void freeMemberList(member_list_t *member_list) {
 
 void insertNewMember(member_list_t *member_list, char *name, variable_type_t *type) {
   member_t *member = malloc(sizeof (member_t));
-  member->name = malloc(strlen(name) + 1);
-  memcpy(member->name, name, strlen(name));
+  member->name = strdup(name);
   member->type = type;
   TAILQ_INSERT_HEAD(member_list, member, pointers);
+}
+
+declaration_list_t *newDeclarationList() {
+  declaration_list_t *declaration_list = malloc(sizeof (declaration_list_t));
+  TAILQ_INIT(declaration_list);
+  return declaration_list;
+}
+
+void freeDeclarationList(declaration_list_t *declaration_list) {
+  declaration_t *d;
+  while(!TAILQ_EMPTY(declaration_list)) {
+    d = TAILQ_FIRST(declaration_list);
+    free(d->name);
+    TAILQ_REMOVE(declaration_list, d, pointers);
+    free(d);
+  }
+  free(declaration_list);
+}
+
+void insertDeclaration(declaration_list_t *declaration_list, declaration_t *declaration) {
+  declaration_t *new_declaration = malloc(sizeof (declaration_t));
+  new_declaration->name = strdup(declaration->name);
+  new_declaration->pointer = declaration->pointer;
+  new_declaration->array_size = declaration->array_size;
+  TAILQ_INSERT_HEAD(declaration_list, new_declaration, pointers);
+}
+
+variable_t *newVariable(variable_type_t *type, int addr) {
+  variable_t *var = malloc(sizeof (variable_t));
+  var->type = type;
+  var->addr = addr;
+  return var;
+}
+
+void freeVariable(variable_t *var) {
+  freeVariableType(var->type);
+  free(var);
 }

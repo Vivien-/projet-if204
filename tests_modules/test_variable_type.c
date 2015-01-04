@@ -60,6 +60,14 @@ int main() {
 
   freeClassDefinition(c);
 
+  declaration_list_t *declarations = newDeclarationList();
+  declaration_t d;
+  d.name = "a";
+
+  insertDeclaration(declarations, &d);
+  
+  freeDeclarationList(declarations);
+
   printf("OK (%d)\n", cpt);
   return 0;
 }
