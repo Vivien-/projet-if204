@@ -1,6 +1,7 @@
 %{
     #include <stdio.h>
     extern int yylineno;
+    extern int asprintf(char** strp, const char *fmt, ...);
     int yylex ();
     int yyerror ();
     char* code = NULL;
@@ -187,6 +188,8 @@ class_internal_declaration
 %%
 #include <stdio.h>
 #include <string.h>
+#include "name_space.h"
+#include "variable_type.h"
 
 extern char yytext[];
 extern int column;
@@ -194,6 +197,24 @@ extern int yylineno;
 extern FILE *yyin;
 
 char *file_name = NULL;
+char *file_output = NULL;
+name_space_stack_t *ns = NULL;
+class_name_space_t *cns = NULL;
+int stack_head = 0;
+FILE* output = NULL;
+FILE *input = NULL;
+
+void init(char* filename){
+  code = "\t.globl main\n\t.type main, @function\n main:\n";	    
+  file_name = strdup(filename);
+  file_output = strdup(filename);
+  file_output[strlen(file_output)-1] = 's';
+  output = fopen(file_output, "w");
+  input = fopen(filename, "r");
+
+  ns = newNameSpaceStack();
+  cns = newClassNameSpace();
+}
 
 int yyerror (char *s) {
     fflush (stdout);
@@ -203,31 +224,25 @@ int yyerror (char *s) {
 
 
 int main (int argc, char *argv[]) {
-    FILE *input = NULL;
-    if (argc==2) {
-      asprintf(&code, "\t.globl main\n\t.type main, @function\n main:\n");
-	input = fopen (argv[1], "r");
-	file_name = strdup (argv[1]);
-	
-	if (input) {
-	    yyin = input;
-	    yyparse();
-	 
-	    
-	    char * file_output = argv[1];
-	    file_output[strlen(file_output)-1] = 's';
-	    FILE* output = fopen(file_output, "w");
-	    fprintf(output, code);
-	}
-	else {
-	  fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);
-	    return 1;
-	}
-	free(file_name);
+  if (argc==2) {
+    init(argv[1]);
+    if (input && output) {
+      yyin = input;
+      yyparse();
+      fprintf(output, "%s", code);
     }
     else {
-	fprintf (stderr, "%s: error: no input file\n", *argv);
-	return 1;
+      fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);
+      return 1;
     }
-    return 0;
+    free(file_name);
+    free(file_output);
+    fclose(input);
+    fclose(output);
+  }
+  else {
+    fprintf (stderr, "%s: error: no input file\n", *argv);
+	return 1;
+  }
+  return 0;
 }
