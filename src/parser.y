@@ -96,23 +96,25 @@ expression
 ;
 
 declaration
-  : type_name declarator_list ';' {
+: type_name declarator_list ';' {
   int size;
   generic_element_t *e;
   declaration_t *declaration;
   variable_type_t *type;
+  asprintf(&code, "%s\tpushq %%rbp\n\tmov %%rsp, %%rbp\n", code);
   TAILQ_FOREACH(e, declaration_list, pointers) {
-  declaration = (declaration_t*)(e->data);
-  printf("declaring variable %s\n", declaration->name);
-  if (findInNameSpace(declaration->name, ns) != NULL) {
-  yyerror("variable already declared");
- }
-  type = getType($1, declaration);
-  size = getSize(type);
-  stack_head += size;
-  insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
-  asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
- }
+    declaration = (declaration_t*)(e->data);
+    printf("declaring variable %s\n", declaration->name);
+    if (findInNameSpace(declaration->name, ns) != NULL) {
+      yyerror("variable already declared");
+    }
+    type = getType($1, declaration);
+    size = getSize(type);
+    stack_head += size;
+    insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
+    asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
+  }
+  asprintf(&code, "%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n");
   free_list(declaration_list, NULL);
   declaration_list = NULL;
  }
