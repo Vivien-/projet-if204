@@ -17,6 +17,8 @@ generic_list_t *new_list();
 
 void insert(generic_list_t *list, void *data, int size);
 
+int nb_element(generic_list_t *list);
+
 void free_list(generic_list_t *list, void(free_method)(void*));
 
 #endif

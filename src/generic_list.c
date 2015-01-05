@@ -16,6 +16,15 @@ void insert(generic_list_t *list, void *data, int size) {
   TAILQ_INSERT_HEAD(list, element, pointers);
 }
 
+int nb_element(generic_list_t *list) {
+  int size = 0;
+  generic_element_t *e;
+  TAILQ_FOREACH(e, list, pointers) {
+    size++;
+  }
+  return size;
+}
+
 void free_list(generic_list_t *list, void(free_method)(void*)) {
   generic_element_t *e;
   while(!TAILQ_EMPTY(list)) {

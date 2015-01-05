@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include "name_space.h"
 
-name_space_stack_t *newNameSpaceStack() {
+name_space_stack_t *new_name_space_stack() {
   name_space_stack_t *nsp = malloc(sizeof (name_space_stack_t));
   TAILQ_INIT(nsp);
   name_space_t *ns = malloc(sizeof (name_space_t));
@@ -13,14 +13,14 @@ name_space_stack_t *newNameSpaceStack() {
   return nsp;
 }
 
-void stackNewNameSpace(name_space_stack_t *nsp) {
+void stack_new_name_space(name_space_stack_t *nsp) {
   name_space_t *ns = malloc(sizeof (name_space_t));
   ns->htab = calloc(1, sizeof (struct hsearch_data));
   hcreate_r(HSIZE, ns->htab);
   TAILQ_INSERT_HEAD(nsp, ns, pointers);
 }
 
-void popNameSpace(name_space_stack_t *nsp) {
+void pop_name_space(name_space_stack_t *nsp) {
   name_space_t *ns = TAILQ_FIRST(nsp);
   hdestroy_r(ns->htab);
   free(ns->htab);
@@ -28,7 +28,7 @@ void popNameSpace(name_space_stack_t *nsp) {
   free(ns);
 }
 
-void insertInCurrentNameSpace(char *name, variable_t *type, name_space_stack_t *nsp) {
+void insert_in_current_name_space(char *name, variable_t *type, name_space_stack_t *nsp) {
   name_space_t *ns = TAILQ_FIRST(nsp);
   ENTRY e, *rv;
   e.key = name;
@@ -36,12 +36,12 @@ void insertInCurrentNameSpace(char *name, variable_t *type, name_space_stack_t *
   hsearch_r(e, ENTER, &rv, ns->htab);
 }
 
-int isCurrentNameSpaceRoot(name_space_stack_t *nsp) {
+int current_name_space_is_root(name_space_stack_t *nsp) {
   name_space_t *ns = TAILQ_FIRST(nsp);
   return ns->pointers.tqe_next == NULL;
 }
 
-variable_t *findInNameSpace(char *name, name_space_stack_t *nsp) {
+variable_t *is_defined(char *name, name_space_stack_t *nsp) {
   name_space_t *ns;
   variable_t *res;
   ENTRY e, *rv;
@@ -55,7 +55,7 @@ variable_t *findInNameSpace(char *name, name_space_stack_t *nsp) {
   return NULL;
 }
 
-void freeNameSpaceStack(name_space_stack_t *nsp) {
+void free_name_space_stack(name_space_stack_t *nsp) {
   if (nsp == NULL) return;
   
   name_space_t *ns;
@@ -70,20 +70,20 @@ void freeNameSpaceStack(name_space_stack_t *nsp) {
   free(nsp);
 }
 
-class_name_space_t *newClassNameSpace() {
+class_name_space_t *new_class_name_space() {
   class_name_space_t *cnp = calloc(1, sizeof (struct hsearch_data));
   hcreate_r(HSIZE, cnp);
   return cnp;
 }
 
-void insertInClassNameSpace(char *name, class_definition_t *class, class_name_space_t *cnp) {
+void insert_in_class_name_space(char *name, class_definition_t *class, class_name_space_t *cnp) {
   ENTRY e, *rv;
   e.key = name;
   e.data = class;
   hsearch_r(e, ENTER, &rv, cnp);
 }
 
-class_definition_t *findInClassNameSpace(char *name, class_name_space_t *cnp) {
+class_definition_t *find_in_class_name_space(char *name, class_name_space_t *cnp) {
   class_definition_t *res;
   ENTRY e, *rv;
   e.key = name;
@@ -94,7 +94,7 @@ class_definition_t *findInClassNameSpace(char *name, class_name_space_t *cnp) {
   return NULL;
 }
 
-void freeClassNameSpace(class_name_space_t *cnp) {
+void free_class_name_space(class_name_space_t *cnp) {
   hdestroy_r(cnp);
   free(cnp);
 }

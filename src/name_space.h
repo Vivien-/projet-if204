@@ -30,48 +30,48 @@ void hdestroy_r(struct hsearch_data *htab);
 /*
  * Instancie une nouvelle pile d'espace de nommage avec un espace de nommage empilé
  */
-name_space_stack_t *newNameSpaceStack();
+name_space_stack_t *new_name_space_stack();
 
 /*
  * Empile un nouvel espace de nommage
  */
-void stackNewNameSpace(name_space_stack_t *nsp);
+void stack_new_name_space(name_space_stack_t *nsp);
 
 /*
  * Dépile un espace de nommage
  */
-void popNameSpace(name_space_stack_t *nsp);
+void pop_name_space(name_space_stack_t *nsp);
 
 /*
  * Insert une entrée dans l'espace de nommage courrant
  */
-void insertInCurrentNameSpace(char *name, variable_t *type, name_space_stack_t *nsp);
+void insert_in_current_name_space(char *name, variable_t *type, name_space_stack_t *nsp);
 
 /*
  * Indique si l'espace de nommage courrant et le premier
  */
-int isCurrentNameSpaceRoot(name_space_stack_t *nsp);
+int current_name_space_is_root(name_space_stack_t *nsp);
 
 /*
  * Retourne le type de la variable de nom name dans tous les espace de nommages
  * Retourne NULL si la variable n'est pas définie
  */
-variable_t *findInNameSpace(char *name, name_space_stack_t *nsp);
+variable_t *is_defined(char *name, name_space_stack_t *nsp);
 
 /*
  * Désalloue la pile d'espaces de nommage (ne désalloue pas les éléments pointés par les entrées dans les tables, les éléments dont les pointeurs sont ajoutés à un espace de nommage ne sont jamais libérés)
  */
-void freeNameSpaceStack(name_space_stack_t *nsp);
+void free_name_space_stack(name_space_stack_t *nsp);
 
 /*
  * Table de hachage pour les définitions de classes
  */
-class_name_space_t *newClassNameSpace();
+class_name_space_t *new_class_name_space();
 
-void insertInClassNameSpace(char *name, class_definition_t *class, class_name_space_t *cnp);
+void insert_in_class_name_space(char *name, class_definition_t *class, class_name_space_t *cnp);
 
-class_definition_t *findInClassNameSpace(char *name, class_name_space_t *cnp);
+class_definition_t *find_in_class_name_space(char *name, class_name_space_t *cnp);
 
-void freeClassNameSpace(class_name_space_t *cnp);
+void free_class_name_space(class_name_space_t *cnp);
 
 #endif

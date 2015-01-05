@@ -10,7 +10,6 @@
   extern int asprintf(char** strp, const char *fmt, ...);
   int yylex ();
   int yyerror ();
-  char* code = NULL;
   name_space_stack_t *ns = NULL;
   class_name_space_t *cns = NULL;
   int stack_head = 0;
@@ -30,17 +29,21 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
-%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression expression_statement statement statement_list compound_statement jump_statement declaration declaration_list compound_identifier
+%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression expression_statement statement statement_list compound_statement jump_statement declaration declaration_list
 %type <basic_type> type_name
-%type <declaration> declarator
+%type <declarator> declarator
+%type <identifier> compound_identifier
 %type <function> external_declaration function_definition
+%type <list> declarator_list parameter_list
 %union {
   enum BASIC_TYPE basic_type;
   char *str;
   int integer;
   float floating;
-  declaration_t declaration;
+  declarator_t declarator;
+  identifier_t identifier;
   function_t function;
+  generic_list_t list;
 }
 %start program
 %%
@@ -59,10 +62,10 @@ primary_expression
 ;
 
 compound_identifier
-: IDENTIFIER { $$ = $1; }
-| IDENTIFIER '[' expression ']'
-| IDENTIFIER '(' argument_expression_list ')'
-| IDENTIFIER '(' ')'
+: IDENTIFIER { $$.name = $1; }
+| IDENTIFIER '[' expression ']' { $$.name = $1; $$.offset = $3; }
+| IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; /*$$.params = $3;*/ }
+| IDENTIFIER '(' ')' { $$.name = $1; TAILQ_INIT(&($$.params)); }
 | IDENTIFIER '[' expression ']' '.' compound_identifier
 | IDENTIFIER '(' argument_expression_list ')' '.' compound_identifier
 | IDENTIFIER '(' ')' '.' compound_identifier
@@ -103,7 +106,10 @@ comparison_expression
 
 expression
 : compound_identifier '=' comparison_expression { 
-  variable_t *var = findInNameSpace($1, ns);
+  variable_t *var;
+  if ((var = is_defined($1.name, ns)) == NULL) {
+    yyerror("undeclared variable");
+  }
   asprintf(&$$, "\tmovl $%s, -%d(%%rbp)\n", $3, var->addr);
 }
 | compound_identifier '[' expression ']' '=' comparison_expression
@@ -114,40 +120,32 @@ declaration
 : type_name declarator_list ';' {
   int size;
   generic_element_t *e;
-  declaration_t *declaration;
-  variable_type_t *type;
+  declarator_t *declarator;
   $$ = "";
-  //asprintf(&code, "%s\tpushq %%rbp\n\tmov %%rsp, %%rbp\n", code);
-  TAILQ_FOREACH(e, declaration_list, pointers) {
-    declaration = (declaration_t*)(e->data);
-    if (findInNameSpace(declaration->name, ns) != NULL) {
+
+  TAILQ_FOREACH(e, &$2, pointers) {
+    declarator = (declarator_t*)(e->data);
+    declarator->type.basic = $1;
+    if (is_defined(declarator->name, ns) != NULL) {
       yyerror("variable already declared");
     }
-    type = getType($1, declaration);
-    size = getSize(type);
-    stack_head += size;
-    insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
-    asprintf(&$$, "%s\tsub $%d, %%esp\n", $$, size);
+    if (is_function(&(declarator->type))) {
+      if (!current_name_space_is_root(ns)) {
+	yyerror("nested function declaration");
+      }
+    } else {
+      size = get_size(&(declarator->type));
+      stack_head += size;
+      asprintf(&$$, "%s\tsub $%d, %%esp\n", $$, size);
+    }
+    insert_in_current_name_space(declarator->name, new_variable(declarator->type, stack_head), ns);
   }
-  //asprintf(&code, "%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n");
-  free_list(declaration_list, NULL);
-  declaration_list = NULL;
  }
 ;
 
 declarator_list
-: declarator { 
-  if (declaration_list == NULL) {
-    declaration_list = new_list();
-  }
-  insert(declaration_list, &$1, sizeof(declaration_t)); 
-}
-| declarator_list ',' declarator { 
-  if (declaration_list == NULL) {
-    declaration_list = new_list();
-  }
-  insert(declaration_list, &$3, sizeof(declaration_t));
-}
+: declarator { TAILQ_INIT(&$$); insert(&$$, &$1, sizeof(declarator_t)); }
+| declarator_list ',' declarator { $$ = $1; insert(&$$, &$3, sizeof(declarator_t)); }
 ;
 
 type_name
@@ -158,11 +156,11 @@ type_name
 ;
 
 declarator
-: IDENTIFIER  { $$.array_size = 1; $$.pointer = 0; $$.name = $1;}
-| '*' IDENTIFIER { $$.array_size = 1; $$.pointer = 1; $$.name = $2; }
-| IDENTIFIER '[' ICONSTANT ']' { $$.array_size = $3; $$.pointer = 0; $$.name = $1; }
-| declarator '(' parameter_list ')' { $$ = $1; }
-| declarator '(' ')' { $$ = $1; }
+: IDENTIFIER  { $$.name = $1; $$.type.array_size = -1; $$.type.nb_param = -1; $$.type.pointer = 0; }
+| '*' IDENTIFIER { $$.name = $2; $$.type.array_size = -1; $$.type.nb_param = -1; $$.type.pointer = 1; }
+| IDENTIFIER '[' ICONSTANT ']' { $$.name = $1; $$.type.array_size = $3; $$.type.nb_param = -1; $$.type.pointer = 0; }
+| declarator '(' parameter_list ')' { $$ = $1; /*$$.type.nb_param = nb_element(&$3); $$.type.params = $3; /*DONT FORGET TO INIT LIST*/ }
+| declarator '(' ')' { $$ = $1; $$.type.nb_param = 0; }
 ;
 
 parameter_list
@@ -185,10 +183,7 @@ statement
 compound_statement
 : '{' '}' { $$ = ""; }
 | '{' statement_list '}' { $$ = $2; }
-| '{' declaration_list statement_list '}' { 
-  asprintf(&$$, "%s%s", $2, $3);
-  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n%s", $2, $3);
-}
+| '{' declaration_list statement_list '}' { asprintf(&$$, "%s%s", $2, $3); }
 ;
 
 declaration_list
@@ -235,7 +230,7 @@ external_declaration
 
 function_definition
 : type_name declarator compound_statement  {
-  $$.type = getType($1, &$2);
+  $$.type = $2.type;
   $$.name = $2.name;
   $$.body = $3;
  }
@@ -270,24 +265,22 @@ extern int yylineno;
 extern FILE *yyin;
 
 void init(char* filename){
-  code = "";	    
   file_name = strdup(filename);
   file_output = strdup(filename);
   file_output[strlen(file_output)-1] = 's';
   output = fopen(file_output, "w");
   input = fopen(filename, "r");
-  ns = newNameSpaceStack();
-  cns = newClassNameSpace();
+  ns = new_name_space_stack();
+  cns = new_class_name_space();
   function_list = new_list();
 }
 
-void freeVariables() {
+void free_variables() {
   free(file_name);
   free(file_output);
-  //free(code);
   free_list(function_list, free);
-  freeNameSpaceStack(ns);
-  freeClassNameSpace(cns);
+  free_name_space_stack(ns);
+  free_class_name_space(cns);
   fclose(input);
   fclose(output);
 }
@@ -309,7 +302,7 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);
       return 1;
     }
-    freeVariables();
+    free_variables();
   }
   else {
     fprintf (stderr, "%s: error: no input file\n", *argv);
