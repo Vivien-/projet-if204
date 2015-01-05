@@ -20,6 +20,11 @@ typedef struct declaration_s declaration_t;
 typedef struct variable_s variable_t;
 typedef struct function_s function_t;
 
+union FloatInt {
+  int i;
+  float f;
+};
+
 struct function_s {
   char *name;
   char *body;

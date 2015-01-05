@@ -30,7 +30,7 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
-%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression expression_statement statement statement_list compound_statement jump_statement declaration declaration_list
+%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression expression_statement statement statement_list compound_statement jump_statement declaration declaration_list compound_identifier
 %type <basic_type> type_name
 %type <declaration> declarator
 %type <function> external_declaration function_definition
@@ -48,14 +48,18 @@
 primary_expression
 : compound_identifier
 | ICONSTANT { asprintf(&$$, "%d", $1); }
-| FCONSTANT { asprintf(&$$, "%f", $1); }
+| FCONSTANT {
+  union FloatInt u;
+  u.f = $1;
+  asprintf(&$$, "%d", u.i); 
+}
 | '(' expression ')'
 | compound_identifier INC_OP
 | compound_identifier DEC_OP
 ;
 
 compound_identifier
-: IDENTIFIER
+: IDENTIFIER { $$ = $1; }
 | IDENTIFIER '[' expression ']'
 | IDENTIFIER '(' argument_expression_list ')'
 | IDENTIFIER '(' ')'
@@ -98,7 +102,10 @@ comparison_expression
 ;
 
 expression
-: compound_identifier '=' comparison_expression
+: compound_identifier '=' comparison_expression { 
+  variable_t *var = findInNameSpace($1, ns);
+  asprintf(&$$, "\tmovl $%s, -%d(%%rbp)\n", $3, var->addr);
+}
 | compound_identifier '[' expression ']' '=' comparison_expression
 | comparison_expression { $$ = $1; }
 ;
@@ -179,7 +186,10 @@ statement
 compound_statement
 : '{' '}' { $$ = ""; }
 | '{' statement_list '}' { $$ = $2; }
-| '{' declaration_list statement_list '}' { asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n%s", $2, $3); }
+| '{' declaration_list statement_list '}' { 
+  asprintf(&$$, "%s%s", $2, $3);
+  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n%s", $2, $3);
+}
 ;
 
 declaration_list
@@ -209,13 +219,13 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'  { $$ = "\n\tret"; } 
-| RETURN expression ';'  { asprintf(&$$, "%s\tmovl $%s, %%eax\n\tret\n", code, $2); }
+: RETURN ';'  { $$ = "\tmov %%rbp, %%rsp\n\tpopq %%rbp\n\n\tret"; } 
+| RETURN expression ';'  { asprintf(&$$, "\tmov %%rbp, %%rsp\n\tpopq %%rbp\n\tmovl $%s, %%eax\n\tret\n", $2); }
 ;
 
 program
-: external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n%s", $1.name, $1.name, $1.name, $1.body); }
-| program external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n%s", $2.name, $2.name, $2.name, $2.body); }
+: external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s", $1.name, $1.name, $1.name, $1.body); }
+| program external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s", $2.name, $2.name, $2.name, $2.body); }
 ;
 
 external_declaration
