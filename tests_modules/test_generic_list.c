@@ -10,14 +10,13 @@ int main() {
   int cpt = 0;
   printf("Tests generic_list.c\n");
 
-  char *str = "a";
+  char *str = "ab";
   generic_list_t *list = new_list();
   insert(list, str, strlen(str));
   generic_element_t *e = TAILQ_FIRST(list);
   char *res = (char *)(e->data);
-  ASSERT(strcmp(res, "a") == 0);
-  printf("%s\n", res);
+  ASSERT(strcmp(res, "ab") == 0);
   free_list(list, free);
-  printf("OK (%d)\n", cpt);
+  printf("\033[0;32mOK\033[0m (%d)\n", cpt);
   return 0;
 }

@@ -67,6 +67,6 @@ int main() {
 
   freeClassDefinition(c);
 
-  printf("OK (%d)\n", cpt);
+  printf("\033[0;32mOK\033[0m (%d)\n", cpt);
   return 0;
 }

@@ -120,7 +120,6 @@ declaration
   //asprintf(&code, "%s\tpushq %%rbp\n\tmov %%rsp, %%rbp\n", code);
   TAILQ_FOREACH(e, declaration_list, pointers) {
     declaration = (declaration_t*)(e->data);
-    printf("declaring variable %s\n", declaration->name);
     if (findInNameSpace(declaration->name, ns) != NULL) {
       yyerror("variable already declared");
     }
