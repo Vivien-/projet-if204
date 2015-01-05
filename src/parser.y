@@ -1,4 +1,5 @@
 %{
+  #define _GNU_SOURCE
   #include <stdio.h>
   #include <string.h>
   #include <stdlib.h>
@@ -13,9 +14,14 @@
   name_space_stack_t *ns = NULL;
   class_name_space_t *cns = NULL;
   int stack_head = 0;
+  char *file_name = NULL;
+  char *file_output = NULL;
+  FILE* output = NULL;
+  FILE *input = NULL;
 
-  //declaration_list_t *declaration_list = NULL;
   generic_list_t *declaration_list = NULL;
+  generic_list_t *declarator_list = NULL;
+  generic_list_t *function_list = NULL;
 %}
 
 %token <str> IDENTIFIER
@@ -24,15 +30,17 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
-%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression
+%type <str> primary_expression unary_expression multiplicative_expression additive_expression comparison_expression expression expression_statement statement statement_list compound_statement jump_statement declaration declaration_list
 %type <basic_type> type_name
 %type <declaration> declarator
+%type <function> external_declaration function_definition
 %union {
   enum BASIC_TYPE basic_type;
   char *str;
   int integer;
   float floating;
   declaration_t declaration;
+  function_t function;
 }
 %start program
 %%
@@ -101,7 +109,8 @@ declaration
   generic_element_t *e;
   declaration_t *declaration;
   variable_type_t *type;
-  asprintf(&code, "%s\tpushq %%rbp\n\tmov %%rsp, %%rbp\n", code);
+  $$ = "";
+  //asprintf(&code, "%s\tpushq %%rbp\n\tmov %%rsp, %%rbp\n", code);
   TAILQ_FOREACH(e, declaration_list, pointers) {
     declaration = (declaration_t*)(e->data);
     printf("declaring variable %s\n", declaration->name);
@@ -112,9 +121,9 @@ declaration
     size = getSize(type);
     stack_head += size;
     insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
-    asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
+    asprintf(&$$, "%s\tsub $%d, %%esp\n", $$, size);
   }
-  asprintf(&code, "%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n");
+  //asprintf(&code, "%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n");
   free_list(declaration_list, NULL);
   declaration_list = NULL;
  }
@@ -160,32 +169,32 @@ parameter_declaration
 ;
 
 statement
-: compound_statement
-| expression_statement 
+: compound_statement { $$ = $1; }
+| expression_statement
 | selection_statement
 | iteration_statement
-| jump_statement
+| jump_statement { $$ = $1; }
 ;
 
 compound_statement
-: '{' '}'
-| '{' statement_list '}'
-| '{' declaration_list statement_list '}'
+: '{' '}' { $$ = ""; }
+| '{' statement_list '}' { $$ = $2; }
+| '{' declaration_list statement_list '}' { asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s\tmov %%rbp, %%rsp\n\tpopq %%rbp\n%s", $2, $3); }
 ;
 
 declaration_list
-: declaration
-| declaration_list declaration
+: declaration { $$ = $1; }
+| declaration_list declaration { asprintf(&$$, "%s%s", $1, $2); }
 ;
 
 statement_list
-: statement
-| statement_list statement
+: statement { $$ = $1; }
+| statement_list statement { asprintf(&$$, "%s%s", $1, $2); }
 ;
 
 expression_statement
 : ';'
-| expression ';'
+| expression ';' { $$ = $1; }
 ;
 
 selection_statement
@@ -200,28 +209,26 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'  { asprintf(&code, "%s\n ret", code); } 
-| RETURN expression ';'  {
-  char * var1 = "%eax";
-  asprintf(&code, "%s\tmovl $0, %s\n\tret\n", code, var1); } 
+: RETURN ';'  { $$ = "\n\tret"; } 
+| RETURN expression ';'  { asprintf(&$$, "%s\tmovl $%s, %%eax\n\tret\n", code, $2); }
 ;
 
 program
-: external_declaration
-| program external_declaration
+: external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n%s", $1.name, $1.name, $1.name, $1.body); }
+| program external_declaration { fprintf(output, "\t.globl %s\n\t.type %s, @function \n%s:\n%s", $2.name, $2.name, $2.name, $2.body); }
 ;
 
 external_declaration
-: function_definition
+: function_definition { $$ = $1; };
 | class_definition
 | declaration
 ;
 
 function_definition
 : type_name declarator compound_statement  {
-  if(strcmp($2.name, "main") == 0) { 
-    asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);
-  }
+  $$.type = getType($1, &$2);
+  $$.name = $2.name;
+  $$.body = $3;
  }
 ;
 
@@ -253,11 +260,6 @@ extern int column;
 extern int yylineno;
 extern FILE *yyin;
 
-char *file_name = NULL;
-char *file_output = NULL;
-FILE* output = NULL;
-FILE *input = NULL;
-
 void init(char* filename){
   code = "";	    
   file_name = strdup(filename);
@@ -267,12 +269,14 @@ void init(char* filename){
   input = fopen(filename, "r");
   ns = newNameSpaceStack();
   cns = newClassNameSpace();
+  function_list = new_list();
 }
 
 void freeVariables() {
   free(file_name);
   free(file_output);
-  free(code);
+  //free(code);
+  free_list(function_list, free);
   freeNameSpaceStack(ns);
   freeClassNameSpace(cns);
   fclose(input);
@@ -291,7 +295,6 @@ int main (int argc, char *argv[]) {
     if (input && output) {
       yyin = input;
       yyparse();
-      fprintf(output, "%s", code);
     }
     else {
       fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);

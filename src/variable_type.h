@@ -18,6 +18,13 @@ typedef struct param_s param_t;
 typedef struct member_s member_t;
 typedef struct declaration_s declaration_t;
 typedef struct variable_s variable_t;
+typedef struct function_s function_t;
+
+struct function_s {
+  char *name;
+  char *body;
+  variable_type_t *type;
+};
 
 struct variable_type_s {
   enum BASIC_TYPE basic;

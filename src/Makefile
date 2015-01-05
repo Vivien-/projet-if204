@@ -8,7 +8,7 @@ OUT=compiler
 all: parser
 
 parser: parser.c scanner.c $(SRC)
-	$(CC) $(CFLAGS) -o $(OUT) $^
+	$(CC) -g $(CFLAGS) -o $(OUT) $^
 
 parser.c: parser.y
 	$(YACC) -o $@ --defines=parser.tab.h $^
