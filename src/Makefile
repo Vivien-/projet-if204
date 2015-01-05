@@ -2,24 +2,24 @@ LEX=lex
 YACC=bison
 CFLAGS=-Wall
 CC=gcc
-SRC=variable_type.c name_space.c
+SRC=generic_list.c variable_type.c name_space.c
 OUT=compiler
 
 all: parser
 
-parser: $(SRC) parser.c scanner.c
+parser: parser.c scanner.c $(SRC)
 	$(CC) $(CFLAGS) -o $(OUT) $^
 
 parser.c: parser.y
 	$(YACC) -o $@ --defines=parser.tab.h $^
 
-#%.c:%.l
 scanner.c: scanner.l
 	$(LEX) -o $@ $^
 
 tests:
-	$(CC) -g $(CFLAGS) -o test_variable_type ../tests_modules/test_variable_type.c variable_type.c && ./test_variable_type
-	$(CC) -g $(CFLAGS) -o test_name_space ../tests_modules/test_name_space.c variable_type.c name_space.c && ./test_name_space
+	$(CC) -g $(CFLAGS) -o test_generic_list ../tests_modules/test_generic_list.c generic_list.c && ./test_generic_list
+	$(CC) -g $(CFLAGS) -o test_variable_type ../tests_modules/test_variable_type.c generic_list.c variable_type.c && ./test_variable_type
+	$(CC) -g $(CFLAGS) -o test_name_space ../tests_modules/test_name_space.c generic_list.c variable_type.c name_space.c && ./test_name_space
 	$(MAKE) parser
 	for i in `ls ../tests/*.c`; do echo $$i; ./$(OUT) $$i; done
 	for i in `ls ../tests_extension/*.c`; do echo $$i; ./$(OUT) $$i; done

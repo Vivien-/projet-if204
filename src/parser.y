@@ -1,8 +1,10 @@
 %{
   #include <stdio.h>
   #include <string.h>
+  #include <stdlib.h>
   #include "variable_type.h"
   #include "name_space.h"
+  #include "generic_list.h"
   extern int yylineno;
   extern int asprintf(char** strp, const char *fmt, ...);
   int yylex ();
@@ -12,7 +14,8 @@
   class_name_space_t *cns = NULL;
   int stack_head = 0;
 
-  declaration_list_t *declaration_list = NULL;
+  //declaration_list_t *declaration_list = NULL;
+  generic_list_t *declaration_list = NULL;
 %}
 
 %token <str> IDENTIFIER
@@ -93,22 +96,24 @@ expression
 ;
 
 declaration
-: type_name declarator_list ';' {
+  : type_name declarator_list ';' {
   int size;
+  generic_element_t *e;
   declaration_t *declaration;
   variable_type_t *type;
-  TAILQ_FOREACH(declaration, declaration_list, pointers) {
-    printf("declaring variable %s\n", declaration->name);
-    if (findInNameSpace(declaration->name, ns) != NULL) { //doesn't work
-      yyerror("variable already declared");
-    }
-    type = getType($1, declaration);
-    size = getSize(type);
-    stack_head += size;
-    insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
-    asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
-  }
-  freeDeclarationList(declaration_list);
+  TAILQ_FOREACH(e, declaration_list, pointers) {
+  declaration = (declaration_t*)(e->data);
+  printf("declaring variable %s\n", declaration->name);
+  if (findInNameSpace(declaration->name, ns) != NULL) {
+  yyerror("variable already declared");
+ }
+  type = getType($1, declaration);
+  size = getSize(type);
+  stack_head += size;
+  insertInCurrentNameSpace(declaration->name, newVariable(type, stack_head), ns);
+  asprintf(&code, "%s\tsub $%d, %%esp\n", code, size);
+ }
+  free_list(declaration_list, NULL);
   declaration_list = NULL;
  }
 ;
@@ -116,14 +121,16 @@ declaration
 declarator_list
 : declarator { 
   if (declaration_list == NULL) {
-    declaration_list = newDeclarationList();
+    declaration_list = new_list();
   }
-  insertDeclaration(declaration_list, &$1); }
+  insert(declaration_list, &$1, sizeof(declaration_t)); 
+}
 | declarator_list ',' declarator { 
   if (declaration_list == NULL) {
-    declaration_list = newDeclarationList();
+    declaration_list = new_list();
   }
-  insertDeclaration(declaration_list, &$3); }
+  insert(declaration_list, &$3, sizeof(declaration_t));
+}
 ;
 
 type_name
@@ -138,7 +145,7 @@ declarator
 | '*' IDENTIFIER { $$.array_size = 1; $$.pointer = 1; $$.name = $2; }
 | IDENTIFIER '[' ICONSTANT ']' { $$.array_size = $3; $$.pointer = 0; $$.name = $1; }
 | declarator '(' parameter_list ')' { $$ = $1; }
-| declarator '(' ')' { $$ = $1; } 
+| declarator '(' ')' { $$ = $1; }
 ;
 
 parameter_list
@@ -209,8 +216,11 @@ external_declaration
 ;
 
 function_definition
-: type_name declarator compound_statement  { 
-  if(strcmp($2.name, "main") == 0) { asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);}}
+: type_name declarator compound_statement  {
+  if(strcmp($2.name, "main") == 0) { 
+    asprintf(&code,"\t.globl main\n\t.type main, @function\n main:\n%s",code);
+  }
+ }
 ;
 
 class_definition
@@ -231,8 +241,10 @@ class_internal_declaration
 %%
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "name_space.h"
 #include "variable_type.h"
+#include "generic_list.h"
 
 extern char yytext[];
 extern int column;
@@ -255,12 +267,21 @@ void init(char* filename){
   cns = newClassNameSpace();
 }
 
+void freeVariables() {
+  free(file_name);
+  free(file_output);
+  free(code);
+  freeNameSpaceStack(ns);
+  freeClassNameSpace(cns);
+  fclose(input);
+  fclose(output);
+}
+
 int yyerror (char *s) {
     fflush (stdout);
     fprintf (stderr, "%s:%d:%d: %s\n", file_name, yylineno, column, s);
-    return 0;
+    exit(1);
 }
-
 
 int main (int argc, char *argv[]) {
   if (argc==2) {
@@ -274,13 +295,7 @@ int main (int argc, char *argv[]) {
       fprintf (stderr, "%s: Could not open %s\n", *argv, argv[1]);
       return 1;
     }
-    free(file_name);
-    free(file_output);
-    free(code);
-    freeNameSpaceStack(ns);
-    freeClassNameSpace(cns);
-    fclose(input);
-    fclose(output);
+    freeVariables();
   }
   else {
     fprintf (stderr, "%s: error: no input file\n", *argv);

@@ -13,7 +13,7 @@ int main() {
 
   ASSERT(isRoot(nsp));
 
-  ASSERT(find("a", nsp) == NULL);
+  ASSERT(findInNameSpace("a", nsp) == NULL);
 
   stackNewNameSpace(nsp);
 
@@ -38,7 +38,7 @@ int main() {
 
   class_name_space_t *cnp = newClassNameSpace();
   
-  insertInClassNameSpace("C", getClassDefinition("C", newMemberList()), cnp);
+  insertInClassNameSpace("C", getClassDefinition("C", new_list()), cnp);
 
   ASSERT(findInClassNameSpace("C", cnp) != NULL);
 
