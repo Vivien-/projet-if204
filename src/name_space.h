@@ -20,6 +20,7 @@ TAILQ_HEAD(name_space_stack_s, name_space_s);
 
 struct name_space_s {
   struct hsearch_data *htab;
+  int size;
   TAILQ_ENTRY(name_space_s) pointers;
 };
 
@@ -57,6 +58,12 @@ int current_name_space_is_root(name_space_stack_t *nsp);
  * Retourne NULL si la variable n'est pas définie
  */
 variable_t *is_defined(char *name, name_space_stack_t *nsp);
+
+int get_top_stack_size(name_space_stack_t *nsp);
+
+int get_stack_size(name_space_stack_t *nsp);
+
+void add_top_stack(int size, name_space_stack_t *nsp);
 
 /*
  * Désalloue la pile d'espaces de nommage (ne désalloue pas les éléments pointés par les entrées dans les tables, les éléments dont les pointeurs sont ajoutés à un espace de nommage ne sont jamais libérés)

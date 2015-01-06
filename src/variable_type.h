@@ -42,6 +42,7 @@ struct identifier_s {
 struct function_s {
   char *name;
   char *body;
+  char *ret;
   variable_type_t type;
 };
 

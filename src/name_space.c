@@ -7,6 +7,7 @@ name_space_stack_t *new_name_space_stack() {
   name_space_stack_t *nsp = malloc(sizeof (name_space_stack_t));
   TAILQ_INIT(nsp);
   name_space_t *ns = malloc(sizeof (name_space_t));
+  ns->size = 0;
   ns->htab = calloc(1, sizeof (struct hsearch_data));
   hcreate_r(HSIZE, ns->htab);
   TAILQ_INSERT_HEAD(nsp, ns, pointers);
@@ -28,12 +29,13 @@ void pop_name_space(name_space_stack_t *nsp) {
   free(ns);
 }
 
-void insert_in_current_name_space(char *name, variable_t *type, name_space_stack_t *nsp) {
+void insert_in_current_name_space(char *name, variable_t *var, name_space_stack_t *nsp) {
   name_space_t *ns = TAILQ_FIRST(nsp);
   ENTRY e, *rv;
   e.key = name;
-  e.data = type;
+  e.data = var;
   hsearch_r(e, ENTER, &rv, ns->htab);
+  add_top_stack(get_size(&(var->type)), nsp);
 }
 
 int current_name_space_is_root(name_space_stack_t *nsp) {
@@ -53,6 +55,25 @@ variable_t *is_defined(char *name, name_space_stack_t *nsp) {
     }
   }
   return NULL;
+}
+
+int get_top_stack_size(name_space_stack_t *nsp) {
+  name_space_t *ns = TAILQ_FIRST(nsp);
+  return ns->size;
+}
+
+int get_stack_size(name_space_stack_t *nsp) {
+  int size = 0;
+  name_space_t *ns;
+  TAILQ_FOREACH(ns, nsp, pointers) {
+    size += ns->size;
+  }
+  return size;
+}
+
+void add_top_stack(int size, name_space_stack_t *nsp) {
+  name_space_t *ns = TAILQ_FIRST(nsp);
+  ns->size += size;
 }
 
 void free_name_space_stack(name_space_stack_t *nsp) {

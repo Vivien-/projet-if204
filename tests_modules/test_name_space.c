@@ -15,6 +15,8 @@ int main() {
 
   ASSERT(is_defined("a", nsp) == NULL);
 
+  ASSERT(get_top_stack_size(nsp) == 0);
+
   stack_new_name_space(nsp);
 
   ASSERT(!current_name_space_is_root(nsp));
@@ -25,10 +27,14 @@ int main() {
 
   ASSERT(is_defined("a", nsp) != NULL);
 
+  ASSERT(get_top_stack_size(nsp) == 4);
+
   stack_new_name_space(nsp);
 
   ASSERT(is_defined("a", nsp) != NULL);
 
+  ASSERT(get_top_stack_size(nsp) == 0);
+  
   pop_name_space(nsp);
   pop_name_space(nsp);
   
