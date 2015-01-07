@@ -59,8 +59,8 @@ primary_expression
     yyerror("undeclared variable");
   }
   if (is_function(&(var->type))) {
-    asprintf(&($$.reg), "-%d(%rbp)", get_stack_size(ns));
-    asprintf(&($$.body), "\tcall %s", $1.name); 
+    $$.reg = "%ebx";
+    asprintf(&($$.body), "\tcall %s\n\tmov -%d(%rbp), %%ebx", $1.name, var->addr); 
   } else {
     $$.reg = "%ebx";
     asprintf(&($$.body), "\tmov -%d(%%rbp), %s", var->addr, $$.reg);
