@@ -18,6 +18,7 @@ typedef struct declarator_s declarator_t;
 typedef struct variable_s variable_t;
 typedef struct function_s function_t;
 typedef struct identifier_s identifier_t;
+typedef struct expression_s expression_t;
 
 struct variable_type_s {
   enum BASIC_TYPE basic;
@@ -31,6 +32,11 @@ struct variable_type_s {
 union FloatInt {
   int i;
   float f;
+};
+
+struct expression_s {
+  char *reg;
+  char *body;
 };
 
 struct identifier_s {
