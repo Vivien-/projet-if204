@@ -23,6 +23,8 @@
   generic_list_t *declaration_list = NULL;
   generic_list_t *declarator_list = NULL;
   generic_list_t *function_list = NULL;
+
+  char* param_regs[6] = { "%rdi", "%rsi", "%rdx", "%rcx", "r8", "r9" };
 %}
 
 %token <str> IDENTIFIER
@@ -59,22 +61,42 @@ primary_expression
     yyerror("undeclared variable");
   }
   if (is_function(&(var->type))) {
-    $$.reg = "%ebx";
-    asprintf(&($$.body), "\tcall %s\n\tmov -%d(%rbp), %%ebx", $1.name, var->addr); 
+    $$.body = "";
+    int i = 0;
+    char *param_reg;
+    generic_element_t *e;
+    expression_t *exp;
+    TAILQ_FOREACH(e, &($1.params), pointers) {
+      if (i < 7) {
+	param_reg = param_regs[i];
+      } else {
+	asprintf(&param_reg, "%d(%rsp)", (i - 7) * 8);
+      }
+      exp = (expression_t*)(e->data);
+      asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s\n", $$.body, exp->body, param_reg);
+    }
+    $$.reg = "%rax";
+    asprintf(&($$.body), "%s\tcall %s\n\tpush %%rax", $$.body, $1.name); 
   } else {
-    $$.reg = "%ebx";
-    asprintf(&($$.body), "\tmov -%d(%%rbp), %s", var->addr, $$.reg);
+    $$.reg = "%rbx";
+    if (is_pointer(&(var->type))) {
+      asprintf(&($$.body), "%s\n\tmov %s, %ecx\n\tmov -%d(%%rbp), %ebx\n\tadd %ecx, %ebx\n\tmov %s, (%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
+    } else {
+      asprintf(&($$.body), "\tmov -%d(%%rbp), %s", var->addr, $$.reg);
+    }
   }
 }
-| ICONSTANT { 
-  $$.reg = "%ebx";
-  asprintf(&($$.body), "\tmov $%d, %s", $1, $$.reg);
-}
+| ICONSTANT {
+  $$.reg = "%rax";
+  //asprintf(&($$.body), "\tmov $%d, %s", $1, $$.reg);
+  asprintf(&($$.body), "\tpush $%d", $1);
+  }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
-  $$.reg = "%ebx";
-  asprintf(&($$.body), "\tmov $%d, %s", u.i, $$.reg);
+  $$.reg = "%rax";
+  //asprintf(&($$.body), "\tmov $%d, %s", u.i, $$.reg);
+  asprintf(&($$.body), "\tpush $%d", $1);
 }
 | '(' expression ')'
 | compound_identifier INC_OP
@@ -82,8 +104,20 @@ primary_expression
 ;
 
 compound_identifier
-: IDENTIFIER { $$.name = $1; }
-| IDENTIFIER '[' expression ']' { $$.name = $1; /*$$.offset = $3;*/ }
+: IDENTIFIER { $$.name = $1; $$.offset.body = ""; }
+| IDENTIFIER '[' expression ']' {
+  $$.name = $1;
+  variable_t *var = is_defined($$.name, ns);
+  if(var == NULL) {
+    yyerror("undeclared variable");
+  }
+  $$.offset.reg = "%rbx";
+  if (is_pointer(&(var->type))) {
+    asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov %%rbx, -%d(%%rbp)\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
+  } else {
+    asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov -%d(%%rbp), %%rbx\n\tadd %%rbx, %s)", $3.body, $3.reg, var->addr, $3.reg);
+  }
+}
 | IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; $$.params = $3; }
 | IDENTIFIER '(' ')' { $$.name = $1; TAILQ_INIT(&($$.params)); }
 | IDENTIFIER '[' expression ']' '.' compound_identifier
@@ -130,8 +164,9 @@ expression
   if ((var = is_defined($1.name, ns)) == NULL) {
     yyerror("undeclared variable");
   }
-  asprintf(&($$.body), "%s\n\tmov %s, -%d(%%rbp)\n", $3.body, $3.reg, var->addr);
-}
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n", $3.body, var->addr);
+  //asprintf(&($$.body), "%s\n\tpushq %s\n", $3.body, $3.reg);
+ }
 | compound_identifier '[' expression ']' '=' comparison_expression
 | comparison_expression { $$ = $1; }
 ;
@@ -191,8 +226,8 @@ parameter_declaration
   int size;
   $2.type.basic = $1;
   size = get_size(&($2.type));
-  asprintf(&$$, "%s\tsub $%d, %%esp\n", parameter_declaration_str, size);
-  insert_in_current_name_space($2.name, new_variable($2.type, get_stack_size(ns)), ns);
+  //asprintf(&$$, "%s\tsub $%d, %%esp\n", parameter_declaration_str, size);
+  //insert_in_current_name_space($2.name, new_variable($2.type, get_stack_size(ns)), ns);
 }
 ;
 
@@ -211,12 +246,14 @@ compound_statement
   parameter_declaration_str = "";
 }
 | '{' statement_list '}' { 
-  asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' declaration_list statement_list '}' {
-  asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
@@ -233,7 +270,7 @@ statement_list
 ;
 
 expression_statement
-: ';'
+: ';' { $$.body = ""; }
 | expression ';' { $$ = $1; }
 ;
 
@@ -250,7 +287,7 @@ iteration_statement
 
 jump_statement
 : RETURN ';'  { $$ = ""; cur_return_statement = ""; }
-| RETURN expression ';'  { $$ = ""; asprintf(&cur_return_statement, "%s\n\tmov %s, %%eax", $2.body, $2.reg); }
+| RETURN expression ';'  { $$ = ""; asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body, $2.reg); }
 ;
 
 program
@@ -259,9 +296,9 @@ program
 ;
 
 external_declaration
-: function_definition { $$ = $1; asprintf(&($$.body), "\t.globl %s\n\t.type %s, @function \n%s:\n%s", $$.name, $$.name, $$.name, $$.body); };
+: function_definition { $$ = $1; asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n%s", $$.name, $$.name, $$.name, $$.body); };
 | class_definition { $$.body = ""; }
-| declaration { $$.body = $1; /*add usual push and pop?*/ }
+| declaration { $$.body = $1; }
 ;
 
 function_definition

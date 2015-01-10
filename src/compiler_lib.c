@@ -1,6 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+int fct_extern(int a) {
+  return a;
+}
+
 int *malloc_int(int size) {
   return malloc(sizeof (int) * size);
 }

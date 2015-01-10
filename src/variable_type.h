@@ -41,7 +41,7 @@ struct expression_s {
 
 struct identifier_s {
   char *name;
-  char *offset;
+  expression_t offset;
   generic_list_t params;
 };
 
@@ -68,6 +68,8 @@ struct variable_s {
 };
 
 int is_function(variable_type_t *type);
+
+int id_pointer(variable_type_t *type);
 
 /*
  * Retourne 1 si les deux types spécifiés sont identiques (y compris prototypes de fonctions)

@@ -27,7 +27,7 @@ int are_same_type(variable_type_t *t1, variable_type_t *t2) {
 }
 
 int get_size(variable_type_t *t) {
-  return 4 * (t->pointer == 1 || t->basic == TYPE_CLASS ? 2 : 1) * (t->array_size == -1 ? 1 : t->array_size);
+  return (t->pointer == 1 || t->basic == TYPE_CLASS ? 8 : 4) * (t->array_size == -1 ? 1 : t->array_size);
 }
 
 void free_variable_type(void *t) {
@@ -95,4 +95,8 @@ void free_variable(void *v) {
 
 int is_function(variable_type_t *type) {
   return type->nb_param != -1;
+}
+
+int is_pointer(variable_type_t *type) {
+  return type->pointer;
 }
