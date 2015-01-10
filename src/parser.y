@@ -76,27 +76,27 @@ primary_expression
       asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s\n", $$.body, exp->body, param_reg);
     }
     $$.reg = "%rax";
-    asprintf(&($$.body), "%s\tcall %s\n\tpush %%rax", $$.body, $1.name); 
+    asprintf(&($$.body), "%s\tcall %s\n\tpush %%rax\n\t", $$.body, $1.name); 
   } else {
     $$.reg = "%rbx";
     if (is_pointer(&(var->type))) {
       asprintf(&($$.body), "%s\n\tmov %s, %ecx\n\tmov -%d(%%rbp), %ebx\n\tadd %ecx, %ebx\n\tmov %s, (%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
     } else {
-      asprintf(&($$.body), "\tmov -%d(%%rbp), %s", var->addr, $$.reg);
+      asprintf(&($$.body), "push -%d(%%rbp)", var->addr);
     }
   }
 }
 | ICONSTANT {
   $$.reg = "%rax";
   //asprintf(&($$.body), "\tmov $%d, %s", $1, $$.reg);
-  asprintf(&($$.body), "\tpush $%d", $1);
+  asprintf(&($$.body), "push $%d", $1);
   }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
   $$.reg = "%rax";
   //asprintf(&($$.body), "\tmov $%d, %s", u.i, $$.reg);
-  asprintf(&($$.body), "\tpush $%d", $1);
+  asprintf(&($$.body), "push $%d", $1);
 }
 | '(' expression ')'
 | compound_identifier INC_OP
@@ -104,7 +104,7 @@ primary_expression
 ;
 
 compound_identifier
-: IDENTIFIER { $$.name = $1; $$.offset.body = ""; }
+: IDENTIFIER { $$.name = $1; }
 | IDENTIFIER '[' expression ']' {
   $$.name = $1;
   variable_t *var = is_defined($$.name, ns);
@@ -139,12 +139,16 @@ unary_expression
 
 multiplicative_expression
 : unary_expression { $$ = $1; }
-| multiplicative_expression '*' unary_expression
+| multiplicative_expression '*' unary_expression{ 
+  asprintf(&($$.body), "%s\n\t%s\n\tpop %%rax\n\tpop %%rbx\n\timul %%rax, %%rbx\n\tpush %%rbx", $1.body, $3.body);
+}
 ;
 
 additive_expression
 : multiplicative_expression { $$ = $1; }
-| additive_expression '+' multiplicative_expression
+| additive_expression '+' multiplicative_expression { 
+  asprintf(&($$.body), "%s\n\t%s\n\tpop %%rax\n\tpop %%rbx\n\tadd %%rax, %%rbx\n\tpush %%rbx", $1.body, $3.body);
+}
 | additive_expression '-' multiplicative_expression
 ;
 
@@ -164,7 +168,7 @@ expression
   if ((var = is_defined($1.name, ns)) == NULL) {
     yyerror("undeclared variable");
   }
-  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n", $3.body, var->addr);
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n\t", $3.body, var->addr);
   //asprintf(&($$.body), "%s\n\tpushq %s\n", $3.body, $3.reg);
  }
 | compound_identifier '[' expression ']' '=' comparison_expression
@@ -247,13 +251,13 @@ compound_statement
 }
 | '{' statement_list '}' { 
   //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n\t%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' declaration_list statement_list '}' {
   //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n\t%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }

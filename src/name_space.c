@@ -36,7 +36,6 @@ void insert_in_current_name_space(char *name, variable_t *var, name_space_stack_
   e.key = name;
   e.data = var;
   hsearch_r(e, ENTER, &rv, ns->htab);
-  printf("adding variable %s (size = %d, function = %s)\n", name, get_size(&(var->type)), is_function(&(var->type)) ? "true" : "false");
   if (!is_function(&(var->type))) {
     add_top_stack(get_size(&(var->type)), nsp);
   }
