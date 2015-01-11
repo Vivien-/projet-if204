@@ -16,6 +16,7 @@
   char *file_output = NULL;
   FILE* output = NULL;
   FILE *input = NULL;
+  int nb_label = 0;
 
   char *cur_return_statement = NULL;
   char *parameter_declaration_str = NULL;
@@ -33,7 +34,7 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
-%type <str> statement statement_list compound_statement jump_statement declaration declaration_list parameter_declaration
+%type <str> statement statement_list compound_statement jump_statement declaration iteration_statement selection_statement declaration_list parameter_declaration
 %type <basic_type> type_name
 %type <declarator> declarator
 %type <identifier> compound_identifier
@@ -70,37 +71,49 @@ primary_expression
       if (i < 7) {
 	param_reg = param_regs[i];
       } else {
-	asprintf(&param_reg, "%d(%rsp)", (i - 7) * 8);
+	asprintf(&param_reg, "%d(%rsp)", (i - 7) * 8); //a corriger avec des pushs
       }
       exp = (expression_t*)(e->data);
-      asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s\n", $$.body, exp->body, param_reg);
+      asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s", $$.body, exp->body, param_reg);
     }
     $$.reg = "%rax";
-    asprintf(&($$.body), "%s\tcall %s\n\tpush %%rax\n\t", $$.body, $1.name); 
+    asprintf(&($$.body), "%s\n\tcall %s\n\tpush %%rax", $$.body, $1.name); 
   } else {
     $$.reg = "%rbx";
     if (is_pointer(&(var->type))) {
       asprintf(&($$.body), "%s\n\tmov %s, %ecx\n\tmov -%d(%%rbp), %ebx\n\tadd %ecx, %ebx\n\tmov %s, (%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
     } else {
-      asprintf(&($$.body), "push -%d(%%rbp)", var->addr);
+      asprintf(&($$.body), "\n\tpush -%d(%%rbp)", var->addr);
     }
   }
 }
 | ICONSTANT {
   $$.reg = "%rax";
   //asprintf(&($$.body), "\tmov $%d, %s", $1, $$.reg);
-  asprintf(&($$.body), "push $%d", $1);
+  asprintf(&($$.body), "\n\tpush $%d", $1);
   }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
   $$.reg = "%rax";
   //asprintf(&($$.body), "\tmov $%d, %s", u.i, $$.reg);
-  asprintf(&($$.body), "push $%d", $1);
+  asprintf(&($$.body), "\n\tpush $%d", $1);
 }
 | '(' expression ')'
-| compound_identifier INC_OP
-| compound_identifier DEC_OP
+| compound_identifier INC_OP {
+  variable_t *var = is_defined($1.name, ns);
+  if (var == NULL) {
+    yyerror("undeclared variable");
+  }
+  asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tinc %%rax\n\tpush %%rax", var->addr);
+}
+| compound_identifier DEC_OP {
+  variable_t *var = is_defined($1.name, ns);
+  if (var == NULL) {
+    yyerror("undeclared variable");
+  }
+  asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tdec %%rax\n\tpush %%rax", var->addr);
+}
 ;
 
 compound_identifier
@@ -133,8 +146,12 @@ argument_expression_list
 
 unary_expression
 : primary_expression { $$ = $1; }
-| '-' unary_expression
-| '!' unary_expression
+| '-' unary_expression {
+  asprintf(&($$.body), "%s\n\tpop %rax\n\tmov $0, %rbx\n\tsub %rbx, %rax\n\tpush %rbx", $2.body);;
+}
+| '!' unary_expression {
+  asprintf(&($$.body), "%s\n\tpop %rax\n\tnot %rax\n\tpush %rax", $2.body);;
+}
 ;
 
 multiplicative_expression
@@ -149,17 +166,37 @@ additive_expression
 | additive_expression '+' multiplicative_expression { 
   asprintf(&($$.body), "%s\n\t%s\n\tpop %%rax\n\tpop %%rbx\n\tadd %%rax, %%rbx\n\tpush %%rbx", $1.body, $3.body);
 }
-| additive_expression '-' multiplicative_expression
+| additive_expression '-' multiplicative_expression {
+  asprintf(&($$.body), "%s\n\t%s\n\tpop %%rax\n\tpop %%rbx\n\tsub %%rax, %%rbx\n\tpush %%rbx", $1.body, $3.body);
+  }
 ;
 
 comparison_expression
 : additive_expression { $$ = $1; }
-| additive_expression '<' additive_expression
-| additive_expression '>' additive_expression
-| additive_expression LE_OP additive_expression
-| additive_expression GE_OP additive_expression
-| additive_expression EQ_OP additive_expression
-| additive_expression NE_OP additive_expression
+| additive_expression '<' additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjl label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
+| additive_expression '>' additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjg label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
+| additive_expression LE_OP additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjle label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
+| additive_expression GE_OP additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjge label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
+| additive_expression EQ_OP additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tje label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
+| additive_expression NE_OP additive_expression {
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjne label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
+  nb_label++;
+  }
 ;
 
 expression
@@ -168,7 +205,7 @@ expression
   if ((var = is_defined($1.name, ns)) == NULL) {
     yyerror("undeclared variable");
   }
-  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n\t", $3.body, var->addr);
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)", $3.body, var->addr);
   //asprintf(&($$.body), "%s\n\tpushq %s\n", $3.body, $3.reg);
  }
 | compound_identifier '[' expression ']' '=' comparison_expression
@@ -236,10 +273,10 @@ parameter_declaration
 ;
 
 statement
-: compound_statement { $$ = $1; stack_new_name_space(ns); }
+: compound_statement { $$ = $1; /*stack_new_name_space(ns);*/ }
 | expression_statement { $$ = $1.body; }
-| selection_statement
-| iteration_statement
+| selection_statement { $$ = $1; }
+| iteration_statement { $$ = $1; }
 | jump_statement { $$ = $1; }
 ;
 
@@ -251,13 +288,13 @@ compound_statement
 }
 | '{' statement_list '}' { 
   //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n\t%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' declaration_list statement_list '}' {
   //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp\n\t%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
@@ -279,14 +316,29 @@ expression_statement
 ;
 
 selection_statement
-: IF '(' expression ')' statement
-| IF '(' expression ')' statement ELSE statement
+: IF '(' expression ')' statement {
+  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d\n\t%s\n\tlabel%d:", $3.body, nb_label, $5, nb_label);
+  nb_label++;
+ }
+| IF '(' expression ')' statement ELSE statement {
+  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d\n\t%s\n\tjmp label%d\nlabel%d:\n\t%s\nlabel%d:", $3.body, nb_label, $5, nb_label + 1, nb_label, $7, nb_label + 1);
+  nb_label += 2;
+ }
 ;
 
 iteration_statement
-: WHILE '(' expression ')' statement
-| FOR '(' expression_statement expression_statement expression ')' statement
-| DO statement WHILE '(' expression ')' ';'
+: WHILE '(' expression ')' statement {
+  asprintf(&($$), "\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $3.body, nb_label + 1, $5, nb_label, nb_label + 1);
+  nb_label += 2;
+ }
+| FOR '(' expression_statement expression_statement expression ')' statement {
+  asprintf(&($$), "%s\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", $3.body, nb_label, $4.body, nb_label + 1, $7, $5.body, nb_label, nb_label + 1);
+  nb_label += 2;
+ }
+| DO statement WHILE '(' expression ')' ';' {
+  asprintf(&($$), "\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $2, nb_label + 1, $5.body, nb_label, nb_label + 1);
+  nb_label += 2;
+ }
 ;
 
 jump_statement
