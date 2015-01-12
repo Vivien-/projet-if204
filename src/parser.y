@@ -108,7 +108,7 @@ primary_expression
     asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
-  asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tinc %%rax\n\tpush %%rax", var->addr);
+  asprintf(&($$.body), "\n\tpop %%rax\n\tinc %%rax\n\tmov %%rax, -%d(%%rbp)", var->addr);
 }
 | compound_identifier DEC_OP {
   variable_t *var = is_defined($1.name, ns);
@@ -117,7 +117,7 @@ primary_expression
     asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
-  asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tdec %%rax\n\tpush %%rax", var->addr);
+  asprintf(&($$.body), "\n\tpop %%rax\n\tdec %%rax\n\tmov %%rax, -%d(%%rbp)", var->addr);
 }
 ;
 
@@ -165,7 +165,7 @@ unary_expression
 
 multiplicative_expression
 : unary_expression { $$ = $1; }
-| multiplicative_expression '*' unary_expression{ 
+| multiplicative_expression '*' unary_expression {
   asprintf(&($$.body), "%s\n\t%s\n\tpop %%rax\n\tpop %%rbx\n\timul %%rax, %%rbx\n\tpush %%rbx", $1.body, $3.body);
 }
 ;
@@ -183,27 +183,27 @@ additive_expression
 comparison_expression
 : additive_expression { $$ = $1; }
 | additive_expression '<' additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjl label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tjl label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 | additive_expression '>' additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjg label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tjg label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 | additive_expression LE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjle label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tjle label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 | additive_expression GE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjge label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tjge label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 | additive_expression EQ_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tje label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tje label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 | additive_expression NE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjne label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rax, %%rbx\n\tjne label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
   }
 ;
@@ -214,7 +214,7 @@ expression
   variable_t *var = is_defined($1.name, ns);
   if(var == NULL) {
     char* msg;
-    asprintf(&msg, "undeclared variable '%s'", $1);
+    asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
   if (strcmp($1.offset.body, "") != 0) {
@@ -280,8 +280,9 @@ parameter_list
 ;
 
 parameter_declaration
-: type_name declarator { 
+: type_name declarator {
   $2.type.basic = $1;
+  insert_in_current_name_space($2.name, new_variable($2.type, 0), ns);
 }
 ;
 
@@ -333,11 +334,11 @@ expression_statement
 
 selection_statement
 : IF '(' expression ')' statement {
-  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d\n\t%s\n\tlabel%d:", $3.body, nb_label, $5, nb_label);
+  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\nlabel%d:", $3.body, nb_label, $5, nb_label);
   nb_label++;
  }
 | IF '(' expression ')' statement ELSE statement {
-  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d\n\t%s\n\tjmp label%d\nlabel%d:\n\t%s\nlabel%d:", $3.body, nb_label, $5, nb_label + 1, nb_label, $7, nb_label + 1);
+  asprintf(&($$), "%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tjmp label%d\nlabel%d:%s\nlabel%d:", $3.body, nb_label, $5, nb_label + 1, nb_label, $7, nb_label + 1);
   nb_label += 2;
  }
 ;
@@ -371,11 +372,22 @@ external_declaration
 : function_definition { 
   //printf("external_declaration -> function_definition\n");
   $$ = $1;
+  generic_element_t *e;
+  declarator_t *param;
+  int i = 0;
+  variable_t *var;
+  TAILQ_FOREACH(e, &($$.type.params), pointers) {
+    param = (declarator_t*)(e->data);
+    var = is_defined(param->name, ns);
+    var->addr = get_stack_size(ns) + get_size(&(var->type));
+    asprintf(&($$.body), "\n\tmov %s, -%d(%%ebp)%s", param_regs[i], var->addr, $$.body);
+    i++;
+  }
   if (strcmp($$.body, "") == 0) {
     asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tmov $0, %%rax\n\tleave\n\tret\n", $$.name, $$.name, $$.name);
-    } else {
-      asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s", $$.name, $$.name, $$.name, $$.body);
-    }
+  } else {
+    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, get_stack_size(ns), $$.body);
+  }
   pop_name_space(ns);
   stack_new_name_space(ns); //problème dans première fonction rencontrée
  };
