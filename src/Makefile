@@ -25,4 +25,4 @@ tests:
 	@for i in `ls ../tests_extension/*.c`; do echo $$i; ./$(OUT) $$i && $(CC) -c compiler_lib.c && $(CC) $${i%.*}.s compiler_lib.o && ./a.out; if [ $$? -eq 0 ]; then echo -e "\033[0;32mOK\033[0m ( valeur de retour :" $$? ")"; else echo -e "\033[0;31mFailed\033[0m"; fi; echo; done
 
 clean:
-	rm -f $(OUT) test_variable_type test_name_space parser.c parser.tab.h parser.tab.c scanner.c *~
+	rm -f $(OUT) test_generic_list test_variable_type test_name_space parser.c parser.tab.h parser.tab.c scanner.c *~ *.o

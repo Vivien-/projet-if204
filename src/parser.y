@@ -17,6 +17,7 @@
   FILE* output = NULL;
   FILE *input = NULL;
   int nb_label = 0;
+  int ret_label = 0;
 
   char *cur_return_statement = NULL;
   char *parameter_declaration_str = NULL;
@@ -59,8 +60,11 @@ primary_expression
 : compound_identifier { 
   variable_t *var = is_defined($1.name, ns);
   if (var == NULL) {
-    yyerror("undeclared variable");
+    char* msg;
+    asprintf(&msg, "undeclared variable '%s'", $1.name);
+    yyerror(msg);
   }
+  $$.type = var->type;
   if (is_function(&(var->type))) {
     $$.body = "";
     int i = 0;
@@ -76,39 +80,43 @@ primary_expression
       exp = (expression_t*)(e->data);
       asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s", $$.body, exp->body, param_reg);
     }
-    $$.reg = "%rax";
+    //$$.reg = "%rax";
     asprintf(&($$.body), "%s\n\tcall %s\n\tpush %%rax", $$.body, $1.name); 
   } else {
-    $$.reg = "%rbx";
+    //$$.reg = "%rbx";
     if (is_pointer(&(var->type))) {
-      asprintf(&($$.body), "%s\n\tmov %s, %%ecx\n\tmov -%d(%%rbp), %%ebx\n\tadd %%ecx, %%ebx\n\tmov %s, (%%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
+      //asprintf(&($$.body), "%s\n\tmov %s, %%ecx\n\tmov -%d(%%rbp), %%ebx\n\tadd %%ecx, %%ebx\n\tmov %s, (%%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
     } else {
       asprintf(&($$.body), "\n\tpush -%d(%%rbp)", var->addr);
     }
   }
 }
 | ICONSTANT {
-  $$.reg = "%rax";
+  //$$.reg = "%rax";
   asprintf(&($$.body), "\n\tpush $%d", $1);
   }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
-  $$.reg = "%rax";
+  //$$.reg = "%rax";
   asprintf(&($$.body), "\n\tpush $%d", u.i);
 }
 | '(' expression ')' { $$ = $2; }
 | compound_identifier INC_OP {
   variable_t *var = is_defined($1.name, ns);
   if (var == NULL) {
-    yyerror("undeclared variable");
+    char* msg;
+    asprintf(&msg, "undeclared variable '%s'", $1.name);
+    yyerror(msg);
   }
   asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tinc %%rax\n\tpush %%rax", var->addr);
 }
 | compound_identifier DEC_OP {
   variable_t *var = is_defined($1.name, ns);
   if (var == NULL) {
-    yyerror("undeclared variable");
+    char* msg;
+    asprintf(&msg, "undeclared variable '%s'", $1.name);
+    yyerror(msg);
   }
   asprintf(&($$.body), "\n\tmov -%d(%%ebp), %%rax\n\tdec %%rax\n\tpush %%rax", var->addr);
 }
@@ -117,16 +125,19 @@ primary_expression
 compound_identifier
 : IDENTIFIER { $$.name = $1; }
 | IDENTIFIER '[' expression ']' {
+  //marche pas
   $$.name = $1;
   variable_t *var = is_defined($$.name, ns);
   if(var == NULL) {
-    yyerror("undeclared variable");
+    char* msg;
+    asprintf(&msg, "undeclared variable '%s'", $1);
+    yyerror(msg);
   }
-  $$.offset.reg = "%rbx";
+  //$$.offset.reg = "%rbx";
   if (is_pointer(&(var->type))) {
-    asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov %%rbx, -%d(%%rbp)\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
+    //asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov %%rbx, -%d(%%rbp)\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
   } else {
-    asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov -%d(%%rbp), %%rbx\n\tadd %%rbx, %s)", $3.body, $3.reg, var->addr, $3.reg);
+    //asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov -%d(%%rbp), %%rbx\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
   }
 }
 | IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; $$.params = $3; }
@@ -211,7 +222,7 @@ expression
 
 declaration
 : type_name declarator_list ';' {
-  printf("declaration -> type_name declarator_list;\n");
+  //printf("declaration -> type_name declarator_list;\n");
   generic_element_t *e;
   declarator_t *declarator;
   $$ = "";
@@ -219,7 +230,9 @@ declaration
     declarator = (declarator_t*)(e->data);
     declarator->type.basic = $1;
     if (is_defined(declarator->name, ns) != NULL) {
-      yyerror("variable already declared");
+      char *msg;
+      asprintf(&msg, "variable '%s' already declared", declarator->name);
+      yyerror(msg);
     }
     if (is_function(&(declarator->type))) {
       if (!current_name_space_is_root(ns)) {
@@ -274,18 +287,22 @@ statement
 
 compound_statement
 : '{' '}' { 
-  $$ = "\tret\n";
+  //mettre return statement ailleurs
+  //$$ = "\n\tret\n";
+  $$ = "";
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' statement_list '}' { 
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  //asprintf(&$$, "\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
+  $$ = $2;
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' declaration_list statement_list '}' {
-  printf("compound_statement -> { ... }\n");
-  asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  //printf("compound_statement -> { ... }\n");
+  //asprintf(&$$, "\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  asprintf(&$$, "%s%s", $2, $3);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
@@ -333,8 +350,8 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'  { $$ = ""; cur_return_statement = ""; }
-| RETURN expression ';'  { $$ = ""; asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body); }
+: RETURN ';'  { asprintf(&$$, "\n\tjmp returnlabel%d", ret_label); /*cur_return_statement = "";*/ /*ne marche que pour 1 return*/ }
+| RETURN expression ';'  { asprintf(&$$, "\n\t%s\n\tpop %%rax\n\tjmp returnlabel%d", $2.body, ret_label); /*asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body);*/ }
 ;
 
 program
@@ -343,17 +360,24 @@ program
 ;
 
 external_declaration
-: function_definition { printf("external_declaration -> funcion_definition\n"); $$ = $1; asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n%s", $$.name, $$.name, $$.name, $$.body); };
+: function_definition { 
+  //printf("external_declaration -> funcion_definition\n");
+  $$ = $1;
+  asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s\nreturnlabel%d:\n\tleave\n\tret\n", $$.name, $$.name, $$.name, $$.body, ret_label);
+  ret_label++;
+ };
 | class_definition { $$.body = ""; }
 | declaration { $$.body = $1; }
 ;
 
 function_definition
 : type_name declarator compound_statement  {
-  printf("function_definition ->type_name declarator compound_statement\n");
+  //printf("function_definition ->type_name declarator compound_statement\n");
   $$.type = $2.type;
   $$.name = $2.name;
   $$.body = $3;
+  variable_type_t voidtype;
+  insert_in_current_name_space($2.name, new_variable(voidtype, 0), ns);
  }
 ;
 
@@ -392,6 +416,9 @@ void init(char* filename){
   output = fopen(file_output, "w");
   input = fopen(filename, "r");
   ns = new_name_space_stack();
+  variable_type_t voidtype;
+  insert_in_current_name_space("printint", new_variable(voidtype, 0), ns);
+  insert_in_current_name_space("printfloat", new_variable(voidtype, 0), ns);
   cns = new_class_name_space();
   function_list = new_list();
   parameter_declaration_str = "";

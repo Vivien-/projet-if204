@@ -35,8 +35,8 @@ union FloatInt {
 };
 
 struct expression_s {
-  char *reg;
   char *body;
+  variable_type_t type;
 };
 
 struct identifier_s {

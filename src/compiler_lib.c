@@ -16,3 +16,11 @@ void print_int(int x) {
 void print_float(float x) {
   printf("%f\n", x);
 }
+
+void printint(int x) {
+  printf("%d\n", x);
+}
+
+void printfloat(float x) {
+  printf("%f\n", x);
+}
