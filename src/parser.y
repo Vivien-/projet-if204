@@ -71,7 +71,7 @@ primary_expression
       if (i < 7) {
 	param_reg = param_regs[i];
       } else {
-	asprintf(&param_reg, "%d(%rsp)", (i - 7) * 8); //a corriger avec des pushs
+	asprintf(&param_reg, "%d(%%rsp)", (i - 7) * 8); //a corriger avec des pushs
       }
       exp = (expression_t*)(e->data);
       asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s", $$.body, exp->body, param_reg);
@@ -81,7 +81,7 @@ primary_expression
   } else {
     $$.reg = "%rbx";
     if (is_pointer(&(var->type))) {
-      asprintf(&($$.body), "%s\n\tmov %s, %ecx\n\tmov -%d(%%rbp), %ebx\n\tadd %ecx, %ebx\n\tmov %s, (%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
+      asprintf(&($$.body), "%s\n\tmov %s, %%ecx\n\tmov -%d(%%rbp), %%ebx\n\tadd %%ecx, %%ebx\n\tmov %s, (%%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
     } else {
       asprintf(&($$.body), "\n\tpush -%d(%%rbp)", var->addr);
     }
@@ -89,17 +89,15 @@ primary_expression
 }
 | ICONSTANT {
   $$.reg = "%rax";
-  //asprintf(&($$.body), "\tmov $%d, %s", $1, $$.reg);
   asprintf(&($$.body), "\n\tpush $%d", $1);
   }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
   $$.reg = "%rax";
-  //asprintf(&($$.body), "\tmov $%d, %s", u.i, $$.reg);
-  asprintf(&($$.body), "\n\tpush $%d", $1);
+  asprintf(&($$.body), "\n\tpush $%d", u.i);
 }
-| '(' expression ')'
+| '(' expression ')' { $$ = $2; }
 | compound_identifier INC_OP {
   variable_t *var = is_defined($1.name, ns);
   if (var == NULL) {
@@ -133,10 +131,10 @@ compound_identifier
 }
 | IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; $$.params = $3; }
 | IDENTIFIER '(' ')' { $$.name = $1; TAILQ_INIT(&($$.params)); }
-| IDENTIFIER '[' expression ']' '.' compound_identifier
-| IDENTIFIER '(' argument_expression_list ')' '.' compound_identifier
-| IDENTIFIER '(' ')' '.' compound_identifier
-| IDENTIFIER '.' compound_identifier
+| IDENTIFIER '[' expression ']' '.' compound_identifier {  }
+| IDENTIFIER '(' argument_expression_list ')' '.' compound_identifier {  }
+| IDENTIFIER '(' ')' '.' compound_identifier {  }
+| IDENTIFIER '.' compound_identifier {  }
 ;
 
 argument_expression_list
@@ -147,10 +145,10 @@ argument_expression_list
 unary_expression
 : primary_expression { $$ = $1; }
 | '-' unary_expression {
-  asprintf(&($$.body), "%s\n\tpop %rax\n\tmov $0, %rbx\n\tsub %rbx, %rax\n\tpush %rbx", $2.body);;
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov $0, %%rbx\n\tsub %%rbx, %%rax\n\tpush %%rbx", $2.body);;
 }
 | '!' unary_expression {
-  asprintf(&($$.body), "%s\n\tpop %rax\n\tnot %rax\n\tpush %rax", $2.body);;
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tnot %%rax\n\tpush %%rax", $2.body);;
 }
 ;
 
@@ -174,28 +172,28 @@ additive_expression
 comparison_expression
 : additive_expression { $$ = $1; }
 | additive_expression '<' additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjl label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjl label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 | additive_expression '>' additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjg label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjg label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 | additive_expression LE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjle label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjle label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 | additive_expression GE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjge label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjge label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 | additive_expression EQ_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tje label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tje label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 | additive_expression NE_OP additive_expression {
-  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjne label%d\n\tpush $0\nlabel%d:\n\tpush $1", $1.body, $3.body, nb_label, nb_label);
-  nb_label++;
+  asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tcmp %%rbx, %%rax\n\tjne label%d\n\tpush $0\n\tjmp label%d\nlabel%d:\n\tpush $1\nlabel%d:", $1.body, $3.body, nb_label, nb_label + 1, nb_label, nb_label + 1);
+  nb_label += 2;
   }
 ;
 
@@ -206,15 +204,14 @@ expression
     yyerror("undeclared variable");
   }
   asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)", $3.body, var->addr);
-  //asprintf(&($$.body), "%s\n\tpushq %s\n", $3.body, $3.reg);
  }
-| compound_identifier '[' expression ']' '=' comparison_expression
+| compound_identifier '[' expression ']' '=' comparison_expression {  }
 | comparison_expression { $$ = $1; }
 ;
 
 declaration
 : type_name declarator_list ';' {
-  int size;
+  printf("declaration -> type_name declarator_list;\n");
   generic_element_t *e;
   declarator_t *declarator;
   $$ = "";
@@ -228,10 +225,9 @@ declaration
       if (!current_name_space_is_root(ns)) {
 	yyerror("nested function declaration");
       }
-    } else {
+    }/* else {
       size = get_size(&(declarator->type));
-      //asprintf(&$$, "%s\tmovl $%d, %%esp\n", $$, size);
-    }
+      }*/
     insert_in_current_name_space(declarator->name, new_variable(declarator->type, get_stack_size(ns)), ns);
   }
  }
@@ -264,11 +260,7 @@ parameter_list
 
 parameter_declaration
 : type_name declarator { 
-  int size;
   $2.type.basic = $1;
-  size = get_size(&($2.type));
-  //asprintf(&$$, "%s\tsub $%d, %%esp\n", parameter_declaration_str, size);
-  //insert_in_current_name_space($2.name, new_variable($2.type, get_stack_size(ns)), ns);
 }
 ;
 
@@ -287,13 +279,12 @@ compound_statement
   parameter_declaration_str = "";
 }
 | '{' statement_list '}' { 
-  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
   asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
 }
 | '{' declaration_list statement_list '}' {
-  //asprintf(&$$, "\tpushq %%rbp\n\tmov %%rsp, %%rbp\n%s%s%s\tmov %%rbp, %%rsp\n%s\n\tpopq %%rbp\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
+  printf("compound_statement -> { ... }\n");
   asprintf(&$$, "\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
   //pop_name_space(ns);
   parameter_declaration_str = "";
@@ -343,7 +334,7 @@ iteration_statement
 
 jump_statement
 : RETURN ';'  { $$ = ""; cur_return_statement = ""; }
-| RETURN expression ';'  { $$ = ""; asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body, $2.reg); }
+| RETURN expression ';'  { $$ = ""; asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body); }
 ;
 
 program
@@ -352,13 +343,14 @@ program
 ;
 
 external_declaration
-: function_definition { $$ = $1; asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n%s", $$.name, $$.name, $$.name, $$.body); };
+: function_definition { printf("external_declaration -> funcion_definition\n"); $$ = $1; asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n%s", $$.name, $$.name, $$.name, $$.body); };
 | class_definition { $$.body = ""; }
 | declaration { $$.body = $1; }
 ;
 
 function_definition
 : type_name declarator compound_statement  {
+  printf("function_definition ->type_name declarator compound_statement\n");
   $$.type = $2.type;
   $$.name = $2.name;
   $$.body = $3;

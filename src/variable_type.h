@@ -69,7 +69,7 @@ struct variable_s {
 
 int is_function(variable_type_t *type);
 
-int id_pointer(variable_type_t *type);
+int is_pointer(variable_type_t *type);
 
 /*
  * Retourne 1 si les deux types spécifiés sont identiques (y compris prototypes de fonctions)
