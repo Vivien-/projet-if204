@@ -17,7 +17,6 @@
   FILE* output = NULL;
   FILE *input = NULL;
   int nb_label = 0;
-  int ret_label = 0;
 
   char *cur_return_statement = NULL;
   char *parameter_declaration_str = NULL;
@@ -123,10 +122,11 @@ primary_expression
 ;
 
 compound_identifier
-: IDENTIFIER { $$.name = $1; }
+: IDENTIFIER { $$.name = $1; $$.offset.body = ""; }
 | IDENTIFIER '[' expression ']' {
   //marche pas
   $$.name = $1;
+  $$.offset = $3;
   variable_t *var = is_defined($$.name, ns);
   if(var == NULL) {
     char* msg;
@@ -209,14 +209,22 @@ comparison_expression
 ;
 
 expression
-: compound_identifier '=' comparison_expression { 
-  variable_t *var;
-  if ((var = is_defined($1.name, ns)) == NULL) {
-    yyerror("undeclared variable");
+: compound_identifier '=' comparison_expression {
+  //missing automatic cast
+  variable_t *var = is_defined($1.name, ns);
+  if(var == NULL) {
+    char* msg;
+    asprintf(&msg, "undeclared variable '%s'", $1);
+    yyerror(msg);
+  }
+  if (strcmp($1.offset.body, "") != 0) {
+    var->type.pointer = 0;
+  }
+  if (!are_compatible(&(var->type), &($3.type))) {
+    yyerror("incompatible type assignement");
   }
   asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)", $3.body, var->addr);
  }
-| compound_identifier '[' expression ']' '=' comparison_expression {  }
 | comparison_expression { $$ = $1; }
 ;
 
@@ -254,14 +262,14 @@ declarator_list
 type_name
 : VOID { $$ = TYPE_VOID; }
 | INT { $$ = TYPE_INT; }
-| FLOAT {$$ = TYPE_FLOAT; }
+| FLOAT { $$ = TYPE_FLOAT; }
 | CLASS IDENTIFIER { $$ = TYPE_CLASS; }
 ;
 
 declarator
 : IDENTIFIER  { $$.name = $1; $$.type.array_size = -1; $$.type.nb_param = -1; $$.type.pointer = 0; }
 | '*' IDENTIFIER { $$.name = $2; $$.type.array_size = -1; $$.type.nb_param = -1; $$.type.pointer = 1; }
-| IDENTIFIER '[' ICONSTANT ']' { $$.name = $1; $$.type.array_size = $3; $$.type.nb_param = -1; $$.type.pointer = 0; }
+| IDENTIFIER '[' ICONSTANT ']' { $$.name = $1; $$.type.array_size = $3; $$.type.nb_param = -1; $$.type.pointer = 1; }
 | declarator '(' parameter_list ')' { $$ = $1; $$.type.nb_param = nb_element(&$3); $$.type.params = $3; }
 | declarator '(' ')' { $$ = $1; $$.type.nb_param = 0; }
 ;
@@ -350,8 +358,8 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'  { asprintf(&$$, "\n\tjmp returnlabel%d", ret_label); /*cur_return_statement = "";*/ /*ne marche que pour 1 return*/ }
-| RETURN expression ';'  { asprintf(&$$, "\n\t%s\n\tpop %%rax\n\tjmp returnlabel%d", $2.body, ret_label); /*asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body);*/ }
+: RETURN ';'  { asprintf(&$$, "\n\tmov $0, %%rax\n\tleave\n\t\ret\n"); /*cur_return_statement = "";*/ /*ne marche que pour 1 return*/ }
+| RETURN expression ';'  { asprintf(&$$, "%s\n\tpop %%rax\n\tleave\n\tret\n", $2.body); /*asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body);*/ }
 ;
 
 program
@@ -361,10 +369,15 @@ program
 
 external_declaration
 : function_definition { 
-  //printf("external_declaration -> funcion_definition\n");
+  //printf("external_declaration -> function_definition\n");
   $$ = $1;
-  asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s\nreturnlabel%d:\n\tleave\n\tret\n", $$.name, $$.name, $$.name, $$.body, ret_label);
-  ret_label++;
+  if (strcmp($$.body, "") == 0) {
+    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tmov $0, %%rax\n\tleave\n\tret\n", $$.name, $$.name, $$.name);
+    } else {
+      asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s", $$.name, $$.name, $$.name, $$.body);
+    }
+  pop_name_space(ns);
+  stack_new_name_space(ns); //problème dans première fonction rencontrée
  };
 | class_definition { $$.body = ""; }
 | declaration { $$.body = $1; }
@@ -374,10 +387,10 @@ function_definition
 : type_name declarator compound_statement  {
   //printf("function_definition ->type_name declarator compound_statement\n");
   $$.type = $2.type;
+  $$.type.basic = $1;
   $$.name = $2.name;
   $$.body = $3;
-  variable_type_t voidtype;
-  insert_in_current_name_space($2.name, new_variable(voidtype, 0), ns);
+  insert_in_current_name_space($$.name, new_variable($$.type, 0), ns);
  }
 ;
 
@@ -416,9 +429,11 @@ void init(char* filename){
   output = fopen(file_output, "w");
   input = fopen(filename, "r");
   ns = new_name_space_stack();
-  variable_type_t voidtype;
-  insert_in_current_name_space("printint", new_variable(voidtype, 0), ns);
-  insert_in_current_name_space("printfloat", new_variable(voidtype, 0), ns);
+  variable_type_t type;
+  type.basic = TYPE_VOID;
+  type.pointer = 0;
+  insert_in_current_name_space("printint", new_variable(type, 0), ns);
+  insert_in_current_name_space("printfloat", new_variable(type, 0), ns);
   cns = new_class_name_space();
   function_list = new_list();
   parameter_declaration_str = "";

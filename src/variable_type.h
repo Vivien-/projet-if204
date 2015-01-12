@@ -76,6 +76,8 @@ int is_pointer(variable_type_t *type);
  */
 int are_same_type(variable_type_t *t1, variable_type_t *t2);
 
+int are_compatible(variable_type_t *t1, variable_type_t *t2);
+
 /*
  * Retourne la taille en mémoire du type passé en paramètre
  */

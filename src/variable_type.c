@@ -26,6 +26,14 @@ int are_same_type(variable_type_t *t1, variable_type_t *t2) {
   return res;
 }
 
+int are_compatible(variable_type_t *t1, variable_type_t *t2) {
+  if (t1->basic == TYPE_INT && t2->basic == TYPE_FLOAT)
+    return 0;
+  if (t1->pointer != t2->pointer)
+    return 0;
+  return 1;
+}
+
 int get_size(variable_type_t *t) {
   return (t->pointer == 1 || t->basic == TYPE_CLASS ? 8 : 4) * (t->array_size == -1 ? 1 : t->array_size);
 }
