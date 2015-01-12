@@ -108,7 +108,7 @@ primary_expression
     asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
-  asprintf(&($$.body), "\n\tpop %%rax\n\tinc %%rax\n\tmov %%rax, -%d(%%rbp)", var->addr);
+  asprintf(&($$.body), "\n\tmov -%d(%%rbp), %%rax\n\tinc %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", var->addr, var->addr);
 }
 | compound_identifier DEC_OP {
   variable_t *var = is_defined($1.name, ns);
@@ -117,7 +117,7 @@ primary_expression
     asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
-  asprintf(&($$.body), "\n\tpop %%rax\n\tdec %%rax\n\tmov %%rax, -%d(%%rbp)", var->addr);
+  asprintf(&($$.body), "\n\tmov -%d(%%rbp), %%rax\n\tdec %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", var->addr, var->addr);
 }
 ;
 
@@ -223,7 +223,7 @@ expression
   if (!are_compatible(&(var->type), &($3.type))) {
     yyerror("incompatible type assignement");
   }
-  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)", $3.body, var->addr);
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", $3.body, var->addr);
  }
 | comparison_expression { $$ = $1; }
 ;
@@ -345,15 +345,15 @@ selection_statement
 
 iteration_statement
 : WHILE '(' expression ')' statement {
-  asprintf(&($$), "\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $3.body, nb_label + 1, $5, nb_label, nb_label + 1);
+  asprintf(&($$), "\nlabel%d:%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tjmp label%d\nlabel%d:", nb_label, $3.body, nb_label + 1, $5, nb_label, nb_label + 1);
   nb_label += 2;
  }
 | FOR '(' expression_statement expression_statement expression ')' statement {
-  asprintf(&($$), "%s\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", $3.body, nb_label, $4.body, nb_label + 1, $7, $5.body, nb_label, nb_label + 1);
+  asprintf(&($$), "%s\nlabel%d:%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s%s\n\tjmp label%d\nlabel%d:", $3.body, nb_label, $4.body, nb_label + 1, $7, $5.body, nb_label, nb_label + 1);
   nb_label += 2;
  }
 | DO statement WHILE '(' expression ')' ';' {
-  asprintf(&($$), "\nlabel%d:\n\t%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $2, nb_label + 1, $5.body, nb_label, nb_label + 1);
+  asprintf(&($$), "\nlabel%d:%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $2, nb_label + 1, $5.body, nb_label, nb_label + 1);
   nb_label += 2;
  }
 ;
@@ -372,7 +372,7 @@ external_declaration
 : function_definition { 
   //printf("external_declaration -> function_definition\n");
   $$ = $1;
-  generic_element_t *e;
+  /*generic_element_t *e;
   declarator_t *param;
   int i = 0;
   variable_t *var;
@@ -382,7 +382,7 @@ external_declaration
     var->addr = get_stack_size(ns) + get_size(&(var->type));
     asprintf(&($$.body), "\n\tmov %s, -%d(%%ebp)%s", param_regs[i], var->addr, $$.body);
     i++;
-  }
+    }*/
   if (strcmp($$.body, "") == 0) {
     asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tmov $0, %%rax\n\tleave\n\tret\n", $$.name, $$.name, $$.name);
   } else {
