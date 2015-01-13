@@ -353,7 +353,7 @@ iteration_statement
   nb_label += 2;
  }
 | DO statement WHILE '(' expression ')' ';' {
-  asprintf(&($$), "\nlabel%d:%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tje label%d\nlabel%d:", nb_label, $2, nb_label + 1, $5.body, nb_label, nb_label + 1);
+  asprintf(&($$), "\nlabel%d:%s%s\n\tpop %%rax\n\tcmp $1, %%rax\n\tjne label%d\n\tjmp label%d\nlabel%d:", nb_label, $2, $5.body, nb_label + 1, nb_label, nb_label + 1);
   nb_label += 2;
  }
 ;
