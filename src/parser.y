@@ -10,7 +10,8 @@
   extern int asprintf(char** strp, const char *fmt, ...);
   int yylex ();
   int yyerror ();
-  name_space_stack_t *ns = NULL;
+  name_space_t *ns_glob = NULL;
+  name_space_t *ns_loc = NULL;
   class_name_space_t *cns = NULL;
   char *file_name = NULL;
   char *file_output = NULL;
@@ -57,7 +58,7 @@
 
 primary_expression
 : compound_identifier {
-  variable_t *var = is_defined($1.name, ns);
+  variable_t *var = is_defined($1.name, ns_glob, ns_loc);
   if (var == NULL) {
     char* msg;
     asprintf(&msg, "undeclared variable '%s'", $1.name);
@@ -99,7 +100,7 @@ primary_expression
 }
 | '(' expression ')' { $$ = $2; }
 | compound_identifier INC_OP {
-  variable_t *var = is_defined($1.name, ns);
+  variable_t *var = is_defined($1.name, ns_glob, ns_loc);
   if (var == NULL) {
     char* msg;
     asprintf(&msg, "undeclared variable '%s'", $1.name);
@@ -108,7 +109,7 @@ primary_expression
   asprintf(&($$.body), "\n\tmov -%d(%%rbp), %%rax\n\tinc %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", var->addr, var->addr);
 }
 | compound_identifier DEC_OP {
-  variable_t *var = is_defined($1.name, ns);
+  variable_t *var = is_defined($1.name, ns_glob, ns_loc);
   if (var == NULL) {
     char* msg;
     asprintf(&msg, "undeclared variable '%s'", $1.name);
@@ -121,10 +122,9 @@ primary_expression
 compound_identifier
 : IDENTIFIER { $$.name = $1; $$.offset.body = ""; }
 | IDENTIFIER '[' expression ']' {
-  //marche pas
   $$.name = $1;
   $$.offset = $3;
-  variable_t *var = is_defined($$.name, ns);
+  variable_t *var = is_defined($$.name, ns_glob, ns_loc);
   if(var == NULL) {
     char* msg;
     asprintf(&msg, "undeclared variable '%s'", $1);
@@ -203,7 +203,7 @@ comparison_expression
 expression
 : compound_identifier '=' comparison_expression {
   //missing automatic cast
-  variable_t *var = is_defined($1.name, ns);
+  variable_t *var = is_defined($1.name, ns_glob,  ns_loc);
   if(var == NULL) {
     char* msg;
     asprintf(&msg, "undeclared variable '%s'", $1.name);
@@ -227,26 +227,24 @@ expression
 
 declaration
 : type_name declarator_list ';' {
-  //printf("declaration -> type_name declarator_list;\n");
   generic_element_t *e;
   declarator_t *declarator;
   $$ = "";
   TAILQ_FOREACH(e, &$2, pointers) {
     declarator = (declarator_t*)(e->data);
     declarator->type.basic = $1;
-    if (is_defined(declarator->name, ns) != NULL) {
+    if (is_defined(declarator->name, ns_glob, ns_loc) != NULL) {
       char *msg;
       asprintf(&msg, "variable '%s' already declared", declarator->name);
       yyerror(msg);
     }
     if (is_function(&(declarator->type))) {
-      if (!current_name_space_is_root(ns)) {
-	yyerror("nested function declaration");
-      }
-    }/* else {
-      size = get_size(&(declarator->type));
-      }*/
-    insert_in_current_name_space(declarator->name, new_variable(declarator->type, get_stack_size(ns)), ns);
+      insert_in_name_space(declarator->name, new_variable(declarator->type, 0), ns_glob);
+      free_name_space(ns_loc);
+      ns_loc = new_name_space();
+    } else {
+      insert_in_name_space(declarator->name, new_variable(declarator->type, ns_loc->size), ns_loc);
+    }
   }
  }
 ;
@@ -279,12 +277,12 @@ parameter_list
 parameter_declaration
 : type_name declarator {
   $2.type.basic = $1;
-  insert_in_current_name_space($2.name, new_variable($2.type, 0), ns);
+  insert_in_name_space($2.name, new_variable($2.type, ns_loc->size), ns_loc);
 }
 ;
 
 statement
-: compound_statement { $$ = $1; /*stack_new_name_space(ns);*/ }
+: compound_statement { $$ = $1; }
 | expression_statement { $$ = $1.body; }
 | selection_statement { $$ = $1; }
 | iteration_statement { $$ = $1; }
@@ -292,26 +290,9 @@ statement
 ;
 
 compound_statement
-: '{' '}' { 
-  //mettre return statement ailleurs
-  //$$ = "\n\tret\n";
-  $$ = "";
-  //pop_name_space(ns);
-  parameter_declaration_str = "";
-}
-| '{' statement_list '}' { 
-  //asprintf(&$$, "\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, cur_return_statement);
-  $$ = $2;
-  //pop_name_space(ns);
-  parameter_declaration_str = "";
-}
-| '{' declaration_list statement_list '}' {
-  //printf("compound_statement -> { ... }\n");
-  //asprintf(&$$, "\n\tpush %%rbp\n\tmov %%rsp, %%rbp%s%s%s%s\n\tleave\n\tret\n", parameter_declaration_str, $2, $3, cur_return_statement);
-  asprintf(&$$, "%s%s", $2, $3);
-  //pop_name_space(ns);
-  parameter_declaration_str = "";
-}
+: '{' '}' { $$ = ""; parameter_declaration_str = ""; }
+| '{' statement_list '}' { $$ = $2; parameter_declaration_str = ""; }
+| '{' declaration_list statement_list '}' { asprintf(&$$, "%s%s", $2, $3); parameter_declaration_str = ""; }
 ;
 
 declaration_list
@@ -356,50 +337,37 @@ iteration_statement
 ;
 
 jump_statement
-: RETURN ';'  { asprintf(&$$, "\n\tmov $0, %%rax\n\tleave\n\t\ret\n"); /*cur_return_statement = "";*/ /*ne marche que pour 1 return*/ }
-| RETURN expression ';'  { asprintf(&$$, "%s\n\tpop %%rax\n\tleave\n\tret\n", $2.body); /*asprintf(&cur_return_statement, "%s\n\tpop %%rax", $2.body);*/ }
+: RETURN ';'  { asprintf(&$$, "\n\tmov $0, %%rax\n\tleave\n\t\ret\n"); }
+| RETURN expression ';'  { asprintf(&$$, "%s\n\tpop %%rax\n\tleave\n\tret\n", $2.body); }
 ;
 
 program
 : external_declaration { fprintf(output, "%s", $1.body); }
-| program external_declaration { fprintf(output, "%s", $2.body); }
+| program external_declaration { free_name_space(ns_loc); ns_loc = new_name_space(); fprintf(output, "%s", $2.body); }
 ;
 
 external_declaration
 : function_definition { 
-  //printf("external_declaration -> function_definition\n");
   $$ = $1;
-  /*generic_element_t *e;
-  declarator_t *param;
-  int i = 0;
-  variable_t *var;
-  TAILQ_FOREACH(e, &($$.type.params), pointers) {
-    param = (declarator_t*)(e->data);
-    var = is_defined(param->name, ns);
-    var->addr = get_stack_size(ns) + get_size(&(var->type));
-    asprintf(&($$.body), "\n\tmov %s, -%d(%%ebp)%s", param_regs[i], var->addr, $$.body);
-    i++;
-    }*/
   if (strcmp($$.body, "") == 0) {
     asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tmov $0, %%rax\n\tleave\n\tret\n", $$.name, $$.name, $$.name);
   } else {
-    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, get_top_stack_size(ns), $$.body);
+    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, ns_loc->size, $$.body);
   }
-  pop_name_space(ns);
-  stack_new_name_space(ns); //problème dans première fonction rencontrée
- };
+ }
 | class_definition { $$.body = ""; }
 | declaration { $$.body = $1; }
 ;
 
 function_definition
 : type_name declarator compound_statement  {
-  //printf("function_definition ->type_name declarator compound_statement\n");
   $$.type = $2.type;
   $$.type.basic = $1;
   $$.name = $2.name;
   $$.body = $3;
-  insert_in_current_name_space($$.name, new_variable($$.type, 0), ns);
+  insert_in_name_space($$.name, new_variable($$.type, 0), ns_glob);
+  free_name_space(ns_loc);
+  ns_loc = new_name_space();
  }
 ;
 
@@ -437,12 +405,13 @@ void init(char* filename){
   file_output[strlen(file_output)-1] = 's';
   output = fopen(file_output, "w");
   input = fopen(filename, "r");
-  ns = new_name_space_stack();
+  ns_glob = new_name_space();
+  ns_loc = new_name_space();
   variable_type_t type;
   type.basic = TYPE_VOID;
   type.pointer = 0;
-  insert_in_current_name_space("printint", new_variable(type, 0), ns);
-  insert_in_current_name_space("printfloat", new_variable(type, 0), ns);
+  insert_in_name_space("printint", new_variable(type, 0), ns_glob);
+  insert_in_name_space("printfloat", new_variable(type, 0), ns_glob);
   cns = new_class_name_space();
   function_list = new_list();
   parameter_declaration_str = "";
@@ -452,7 +421,8 @@ void free_variables() {
   free(file_name);
   free(file_output);
   free_list(function_list, free);
-  free_name_space_stack(ns);
+  free_name_space(ns_glob);
+  free_name_space(ns_loc);
   free_class_name_space(cns);
   fclose(input);
   fclose(output);

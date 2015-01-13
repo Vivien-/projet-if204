@@ -4,94 +4,43 @@
 #include <stdio.h>
 #include "name_space.h"
 
-name_space_stack_t *new_name_space_stack() {
-  name_space_stack_t *nsp = malloc(sizeof (name_space_stack_t));
-  TAILQ_INIT(nsp);
+name_space_t *new_name_space() {
   name_space_t *ns = malloc(sizeof (name_space_t));
   ns->size = 0;
   ns->htab = calloc(1, sizeof (struct hsearch_data));
   hcreate_r(HSIZE, ns->htab);
-  TAILQ_INSERT_HEAD(nsp, ns, pointers);
-  return nsp;
+  return ns;
 }
 
-void stack_new_name_space(name_space_stack_t *nsp) {
-  name_space_t *ns = malloc(sizeof (name_space_t));
-  ns->htab = calloc(1, sizeof (struct hsearch_data));
-  hcreate_r(HSIZE, ns->htab);
-  TAILQ_INSERT_HEAD(nsp, ns, pointers);
+void free_name_space(name_space_t *ns) {
+  if (ns != NULL) {
+    hdestroy_r(ns->htab);
+    free(ns->htab);
+    free(ns);
+  }
 }
 
-void pop_name_space(name_space_stack_t *nsp) {
-  name_space_t *ns = TAILQ_FIRST(nsp);
-  hdestroy_r(ns->htab);
-  free(ns->htab);
-  TAILQ_REMOVE(nsp, ns, pointers);
-  free(ns);
-}
-
-void insert_in_current_name_space(char *name, variable_t *var, name_space_stack_t *nsp) {
-  name_space_t *ns = TAILQ_FIRST(nsp);
+void insert_in_name_space(char *name, variable_t *var, name_space_t *ns) {
   ENTRY e, *rv;
   e.key = name;
   e.data = var;
   hsearch_r(e, ENTER, &rv, ns->htab);
-  if (!is_function(&(var->type))) {
-    add_top_stack(get_size(&(var->type)), nsp);
-  }
+  ns->size += get_size(&(var->type));
 }
 
-int current_name_space_is_root(name_space_stack_t *nsp) {
-  name_space_t *ns = TAILQ_FIRST(nsp);
-  return ns->pointers.tqe_next == NULL;
-}
-
-variable_t *is_defined(char *name, name_space_stack_t *nsp) {
-  name_space_t *ns;
+variable_t *is_defined(char *name, name_space_t *ns_glob, name_space_t *ns_loc) {
   variable_t *res;
   ENTRY e, *rv;
   e.key = name;
-  TAILQ_FOREACH(ns, nsp, pointers) {
-    if (hsearch_r(e, FIND, &rv, ns->htab)) {
-      res = rv->data;
-      return res;
-    }
+  if (ns_glob && hsearch_r(e, FIND, &rv, ns_glob->htab)) {
+    res = rv->data;
+    return res;
+  }
+  if (ns_loc && hsearch_r(e, FIND, &rv, ns_loc->htab)) {
+    res = rv->data;
+    return res;
   }
   return NULL;
-}
-
-int get_top_stack_size(name_space_stack_t *nsp) {
-  name_space_t *ns = TAILQ_FIRST(nsp);
-  return ns->size;
-}
-
-int get_stack_size(name_space_stack_t *nsp) {
-  int size = 0;
-  name_space_t *ns;
-  TAILQ_FOREACH(ns, nsp, pointers) {
-    size += ns->size;
-  }
-  return size;
-}
-
-void add_top_stack(int size, name_space_stack_t *nsp) {
-  name_space_t *ns = TAILQ_FIRST(nsp);
-  ns->size += size;
-}
-
-void free_name_space_stack(name_space_stack_t *nsp) {
-  if (nsp == NULL) return;
-  
-  name_space_t *ns;
-  while(!TAILQ_EMPTY(nsp)) {
-    ns = TAILQ_FIRST(nsp);
-    hdestroy_r(ns->htab);
-    free(ns->htab);
-    TAILQ_REMOVE(nsp, ns, pointers);
-    free(ns);
-  }
-
-  free(nsp);
 }
 
 class_name_space_t *new_class_name_space() {

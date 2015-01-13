@@ -9,40 +9,25 @@ int main() {
   int cpt = 0;
   printf("Tests name_space.c\n");
 
-  name_space_stack_t *nsp = new_name_space_stack();
+  name_space_t *nsp = new_name_space();
 
-  ASSERT(current_name_space_is_root(nsp));
+  ASSERT(nsp != NULL);
 
   ASSERT(is_defined("a", nsp) == NULL);
 
-  ASSERT(get_top_stack_size(nsp) == 0);
-
-  stack_new_name_space(nsp);
-
-  ASSERT(!current_name_space_is_root(nsp));
+  ASSERT(nsp->size == 0);
 
   variable_type_t t;
 
-  insert_in_current_name_space("a", new_variable(t, 0), nsp);
+  insert_in_name_space("a", new_variable(t, 0), nsp);
 
   ASSERT(is_defined("a", nsp) != NULL);
 
-  ASSERT(get_top_stack_size(nsp) == 4);
-
-  stack_new_name_space(nsp);
+  ASSERT(nsp->size == 4);
 
   ASSERT(is_defined("a", nsp) != NULL);
 
-  ASSERT(get_top_stack_size(nsp) == 0);
-  
-  pop_name_space(nsp);
-  pop_name_space(nsp);
-  
-  ASSERT(current_name_space_is_root(nsp));
-
-  ASSERT(is_defined("a", nsp) == NULL);
-
-  free_name_space_stack(nsp);
+  free_name_space(nsp);
 
   class_name_space_t *cnp = new_class_name_space();
   
