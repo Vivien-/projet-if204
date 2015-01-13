@@ -6,7 +6,7 @@
 
 name_space_t *new_name_space() {
   name_space_t *ns = malloc(sizeof (name_space_t));
-  ns->size = 0;
+  ns->size = 8;
   ns->htab = calloc(1, sizeof (struct hsearch_data));
   hcreate_r(HSIZE, ns->htab);
   return ns;
