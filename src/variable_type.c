@@ -35,7 +35,13 @@ int are_compatible(variable_type_t *t1, variable_type_t *t2) {
 }
 
 int get_size(variable_type_t *t) {
-  return (t->pointer == 1 || t->basic == TYPE_CLASS ? 8 : 4) * (t->array_size == -1 ? 1 : t->array_size);
+  if (t->array_size != -1) {
+    return 4 * t->array_size;
+  }
+  if (t->pointer == 1 || t->basic == TYPE_CLASS) {
+    return 8;
+  }
+  return 4;
 }
 
 void free_variable_type(void *t) {

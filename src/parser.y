@@ -25,7 +25,7 @@
   generic_list_t *declarator_list = NULL;
   generic_list_t *function_list = NULL;
 
-  char* param_regs[6] = { "%rdi", "%rsi", "%rdx", "%rcx", "r8", "r9" };
+  char* param_regs[6] = { "%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9" };
 %}
 
 %token <str> IDENTIFIER
@@ -56,7 +56,7 @@
 %%
 
 primary_expression
-: compound_identifier { 
+: compound_identifier {
   variable_t *var = is_defined($1.name, ns);
   if (var == NULL) {
     char* msg;
@@ -64,40 +64,37 @@ primary_expression
     yyerror(msg);
   }
   $$.type = var->type;
-  if (is_function(&(var->type))) {
+  if (strlen($1.offset.body) > 0) {
+    $$.type.pointer = 0;
+  }
+  if (is_function(&($$.type))) {
     $$.body = "";
     int i = 0;
-    char *param_reg;
     generic_element_t *e;
     expression_t *exp;
     TAILQ_FOREACH(e, &($1.params), pointers) {
-      if (i < 7) {
-	param_reg = param_regs[i];
-      } else {
-	asprintf(&param_reg, "%d(%%rsp)", (i - 7) * 8); //a corriger avec des pushs
-      }
       exp = (expression_t*)(e->data);
-      asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tmov %%rax, %s", $$.body, exp->body, param_reg);
+      if (i < 7) {
+	asprintf(&($$.body), "%s%s\n\tpop %s", $$.body, exp->body, param_regs[i]);
+      } else {
+	asprintf(&($$.body), "%s%s", $$.body, exp->body);
+      }
     }
-    //$$.reg = "%rax";
     asprintf(&($$.body), "%s\n\tcall %s\n\tpush %%rax", $$.body, $1.name); 
   } else {
-    //$$.reg = "%rbx";
-    if (is_pointer(&(var->type))) {
-      //asprintf(&($$.body), "%s\n\tmov %s, %%ecx\n\tmov -%d(%%rbp), %%ebx\n\tadd %%ecx, %%ebx\n\tmov %s, (%%ebx)", $1.offset.body, $1.offset.reg, var->addr, $$.reg);
+    if (is_pointer(&(var->type)) && !is_pointer(&($$.type))) {
+      asprintf(&($$.body), "%s\n\tpop %%rax\n\tpush -%d(%%rbp, %%rax, 4)", $1.offset.body, var->addr);
     } else {
       asprintf(&($$.body), "\n\tpush -%d(%%rbp)", var->addr);
     }
   }
 }
 | ICONSTANT {
-  //$$.reg = "%rax";
   asprintf(&($$.body), "\n\tpush $%d", $1);
   }
 | FCONSTANT {
   union FloatInt u;
   u.f = $1;
-  //$$.reg = "%rax";
   asprintf(&($$.body), "\n\tpush $%d", u.i);
 }
 | '(' expression ')' { $$ = $2; }
@@ -133,15 +130,10 @@ compound_identifier
     asprintf(&msg, "undeclared variable '%s'", $1);
     yyerror(msg);
   }
-  //$$.offset.reg = "%rbx";
-  if (is_pointer(&(var->type))) {
-    //asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov %%rbx, -%d(%%rbp)\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
-  } else {
-    //asprintf(&($$.offset.body), "%s\n\tmul $4, %s\n\tmov -%d(%%rbp), %%rbx\n\tadd %%rbx, %s", $3.body, $3.reg, var->addr, $3.reg);
-  }
+  $$.offset.body = $3.body;
 }
-| IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; $$.params = $3; }
-| IDENTIFIER '(' ')' { $$.name = $1; TAILQ_INIT(&($$.params)); }
+| IDENTIFIER '(' argument_expression_list ')' { $$.name = $1; $$.params = $3; $$.offset.body = ""; }
+| IDENTIFIER '(' ')' { $$.name = $1; TAILQ_INIT(&($$.params)); $$.offset.body = ""; }
 | IDENTIFIER '[' expression ']' '.' compound_identifier {  }
 | IDENTIFIER '(' argument_expression_list ')' '.' compound_identifier {  }
 | IDENTIFIER '(' ')' '.' compound_identifier {  }
@@ -159,7 +151,7 @@ unary_expression
   asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov $0, %%rbx\n\tsub %%rbx, %%rax\n\tpush %%rbx", $2.body);;
 }
 | '!' unary_expression {
-  asprintf(&($$.body), "%s\n\tpop %%rax\n\tnot %%rax\n\tpush %%rax", $2.body);;
+  asprintf(&($$.body), "%s\n\tpop %%rax\n\tnot %%rax\n\tpush %%rax", $2.body);
 }
 ;
 
@@ -217,13 +209,18 @@ expression
     asprintf(&msg, "undeclared variable '%s'", $1.name);
     yyerror(msg);
   }
-  if (strcmp($1.offset.body, "") != 0) {
-    var->type.pointer = 0;
+  $$.type = var->type;
+  if (strlen($1.offset.body) > 0) {
+    $$.type.pointer = 0;
   }
-  if (!are_compatible(&(var->type), &($3.type))) {
+  if (!are_compatible(&($$.type), &($3.type))) {
     yyerror("incompatible type assignement");
   }
-  asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", $3.body, var->addr);
+  if (is_pointer(&(var->type)) && !is_pointer(&($$.type))) {
+    asprintf(&($$.body), "%s%s\n\tpop %%rax\n\tpop %%rbx\n\tmov %%rax, -%d(%%rbp, %%rbx, 4)\n\tpush %%rax", $1.offset.body, $3.body, var->addr);
+  } else {
+    asprintf(&($$.body), "%s\n\tpop %%rax\n\tmov %%rax, -%d(%%rbp)\n\tpush %%rax", $3.body, var->addr);
+  }
  }
 | comparison_expression { $$ = $1; }
 ;
@@ -386,7 +383,7 @@ external_declaration
   if (strcmp($$.body, "") == 0) {
     asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tmov $0, %%rax\n\tleave\n\tret\n", $$.name, $$.name, $$.name);
   } else {
-    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, get_stack_size(ns), $$.body);
+    asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, get_top_stack_size(ns), $$.body);
   }
   pop_name_space(ns);
   stack_new_name_space(ns); //problème dans première fonction rencontrée
