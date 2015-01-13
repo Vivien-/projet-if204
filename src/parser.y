@@ -35,9 +35,9 @@
 %token INC_OP DEC_OP LE_OP GE_OP EQ_OP NE_OP
 %token <basic_type> INT FLOAT VOID CLASS
 %token IF ELSE WHILE RETURN FOR DO
-%type <str> statement statement_list compound_statement jump_statement declaration iteration_statement selection_statement declaration_list parameter_declaration
+%type <str> statement statement_list compound_statement jump_statement declaration iteration_statement selection_statement declaration_list
 %type <basic_type> type_name
-%type <declarator> declarator
+%type <declarator> declarator parameter_declaration
 %type <identifier> compound_identifier
 %type <function> external_declaration function_definition
 %type <list> declarator_list parameter_list argument_expression_list
@@ -80,6 +80,7 @@ primary_expression
       } else {
 	asprintf(&($$.body), "%s%s", $$.body, exp->body);
       }
+      i++;
     }
     asprintf(&($$.body), "%s\n\tcall %s\n\tpush %%rax", $$.body, $1.name); 
   } else {
@@ -276,7 +277,8 @@ parameter_list
 
 parameter_declaration
 : type_name declarator {
-  $2.type.basic = $1;
+  $$ = $2;
+  $$.type.basic = $1;
   insert_in_name_space($2.name, new_variable($2.type, ns_loc->size), ns_loc);
 }
 ;
@@ -354,6 +356,8 @@ external_declaration
   } else {
     asprintf(&($$.body), "\t.text\n\t.globl %s\n\t.type %s, @function \n%s:\n\tpush %%rbp\n\tmov %%rsp, %%rbp\n\tsub $%d, %%rsp%s", $$.name, $$.name, $$.name, ns_loc->size, $$.body);
   }
+  free_name_space(ns_loc);
+  ns_loc = new_name_space();
  }
 | class_definition { $$.body = ""; }
 | declaration { $$.body = $1; }
@@ -364,10 +368,23 @@ function_definition
   $$.type = $2.type;
   $$.type.basic = $1;
   $$.name = $2.name;
-  $$.body = $3;
+  $$.body = "";
+  variable_t *param;
+  generic_element_t *e;
+  declarator_t *declarator;
+  int i = 0;
+  TAILQ_FOREACH(e, &($$.type.params), pointers) {
+    declarator = (declarator_t*)(e->data);
+    param = is_defined(declarator->name, NULL, ns_loc);
+    if (i < 7) {
+      asprintf(&($$.body), "%s\n\tmov %s, -%d(%%rbp)", $$.body, param_regs[i], param->addr);
+    } else {
+      asprintf(&($$.body), "%s\n\tpop -%d(%%rbp)", $$.body, param->addr);
+    }
+    i++;
+  }
+  asprintf(&($$.body), "%s%s", $$.body, $3);
   insert_in_name_space($$.name, new_variable($$.type, 0), ns_glob);
-  free_name_space(ns_loc);
-  ns_loc = new_name_space();
  }
 ;
 
